@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>G2B Finder 모바일</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🛒</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+<meta name="theme-color" content="#2a78d6" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="G2B Finder" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="stylesheet" href="mobile.css" />
+</head>
+<body>
+
+<header>
+  <div class="brand">G2B <span>Finder</span></div>
+  <div class="small muted">나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역)</div>
+  <div class="headinfo">
+    <span class="badge" id="modeBadge">확인 중…</span>
+    <span class="badge" id="usageBadge">API 0회</span>
+    <button class="btn" id="themeBtn" title="밝게/어둡게">🌙</button>
+    <button class="btn" id="quitBtn" title="뒤에서 도는 프로그램을 끕니다. 평소에는 켜 둬도 됩니다 — 끄면 다음 로그인 전까지 북마크로 열리지 않습니다.">종료</button>
+  </div>
+</header>
+
+<nav>
+  <button data-tab="orders">거래내역</button>
+  <button data-tab="products">등록품목</button>
+  <button data-tab="mine">업체 실적</button>
+  <button data-tab="marks">관심목록</button>
+  <button data-tab="compare">물품비교</button>
+  <button data-tab="manage" class="on admin-only">수집 · 설정</button>
+</nav>
+
+<main>
+
+<!-- 여러 화면을 묶은 탭(수집 · 설정)의 하위 메뉴 -->
+<div class="subnav" id="subnav" hidden></div>
+
+<!-- 검색 기간 중 저장 안 된 날짜를 알리고, 받아 채우는 진행 상황을 보여준다 (모든 탭 공용) -->
+<div id="fillBanner"></div>
+
+<!-- ───────── 현황 · 수집 ───────── -->
+<section id="tab-home">
+  <div id="homeNotice"></div>
+
+  <div class="card">
+    <h2>로컬 데이터 현황</h2>
+    <p class="sub">검색·집계는 전부 내 PC 의 <code>data/app.db</code> 에서 합니다. 먼저 아래에서 기간을 정해 수집하세요.</p>
+    <div class="tiles" id="homeTiles"></div>
+  </div>
+
+  <div class="card" id="reqCard">
+    <h2>동료 요청 <span class="badge warn" id="reqCount" hidden></span></h2>
+    <p class="sub">검색 전용 프로그램을 쓰는 동료가 <b>없는 자료를 검색하면</b> 요청이 여기로 들어옵니다. <b>받기</b>를 누르면 기간·세부품명이 저절로 채워져 <b>빠진 날짜만</b> 받고, 자동 배포가 몇 분 안에 동료 화면에 넣어 줍니다.</p>
+    <div id="reqList"></div>
+  </div>
+
+  <div class="card">
+    <h2>데이터 수집</h2>
+    <p class="sub"><b>세부품명</b>(MAS·일반단가·제3자단가는 품명)을 넣어야 수집합니다. 이미 받아 둔 날짜는 건너뛰고 <b>빠진 날짜만</b> API 로 받습니다. 기간을 31일 이하로 잘라 마지막 페이지까지 받아옵니다. 개발계정은 하루 1,000회 한도입니다.</p>
+    <div class="grid filters">
+      <div>
+        <label class="f">데이터셋</label>
+        <select id="colDataset"></select>
+      </div>
+      <div>
+        <label class="f">시작일</label>
+        <input type="date" id="colFrom" />
+      </div>
+      <div>
+        <label class="f">종료일</label>
+        <input type="date" id="colTo" />
+      </div>
+      <div>
+        <label class="f">한 페이지 건수</label>
+        <select id="colRows">
+          <option value="100">100</option>
+          <option value="300">300</option>
+          <option value="500">500</option>
+          <option value="999">999</option>
+        </select>
+      </div>
+      <div>
+        <label class="f">구간당 최대 페이지</label>
+        <input type="number" id="colMaxPages" value="200" min="1" max="200" />
+      </div>
+      <div>
+        <label class="f"><span id="colFilterName">세부품명</span> <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="colFilter" autocomplete="off" placeholder="필수 — 예) 논슬립" />
+      </div>
+    </div>
+    <div class="row" style="margin-top: 12px">
+      <button class="btn primary" id="colRun">수집 시작</button>
+      <label class="small" title="끄면 이미 받은 날짜도 다시 받습니다 (변경분을 새로 반영하고 싶을 때)"><input type="checkbox" id="colSkip" checked /> 받아 둔 날짜 건너뛰기</label>
+      <span class="chips">
+        <span class="chip" data-range="7">최근 7일</span>
+        <span class="chip" data-range="30">최근 30일</span>
+        <span class="chip" data-range="90">최근 90일</span>
+        <span class="chip" data-range="365">최근 1년</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="btn" id="diagBtn">연결 진단</button>
+    </div>
+    <div id="colProgress" style="margin-top: 12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>파일 가져오기 <span class="small muted">(과거 거래내역)</span></h2>
+    <p class="sub">나라장터·조달데이터허브에서 내려받은 <b>납품요구 물품 내역</b> 파일(.csv, .xlsx)을 거래내역에 넣습니다. API 를 쓰지 않고 과거 자료를 채울 수 있고, API 로 받은 자료와 같은 건은 한 번만 저장됩니다.</p>
+    <div class="row">
+      <button class="btn primary" id="impPickFiles">파일 선택</button>
+      <button class="btn" id="impPickDir">폴더 선택</button>
+      <input type="file" id="impFiles" multiple accept=".csv,.xlsx,.txt" hidden />
+      <input type="file" id="impDir" webkitdirectory hidden />
+      <label class="small" title="파일 검색조건이 기간 + 세부품명(또는 물품분류)뿐이면, 그 기간·세부품명은 검색할 때 API 로 다시 받지 않습니다"><input type="checkbox" id="impCover" checked /> 파일 기간을 받아 둔 날짜로 기록</label>
+    </div>
+    <div class="row" style="margin-top: 10px">
+      <input type="text" id="impPath" placeholder="또는 폴더 경로를 붙여넣기 — 예) E:\OneDrive\...\납품DB" style="flex: 1; min-width: 260px" />
+      <button class="btn" id="impPathRun">경로에서 가져오기</button>
+    </div>
+    <p class="small muted" style="margin: 6px 0 0">OneDrive 폴더의 파일은 브라우저가 올리지 못할 때가 있습니다. 그럴 땐 경로를 붙여넣어 가져오세요 (탐색기 주소창에서 복사).</p>
+    <div id="impProgress" style="margin-top: 12px"></div>
+    <div class="tablewrap"><table id="impTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>최근 수집 이력</h2>
+    <div class="tablewrap"><table id="syncTable"></table></div>
+  </div>
+</section>
+
+<!-- ───────── 거래내역 ───────── -->
+<section id="tab-orders" hidden>
+  <div class="card">
+    <h2>거래내역 검색 <span class="small muted">(납품요구 상세)</span></h2>
+    <p class="sub">수요기관이 쇼핑몰에서 사 간 물품을 한 줄씩 보거나, 아래 <b>보기</b>에서 월별·기관별·업체별 등으로 묶어 합계와 비중을 봅니다.</p>
+    <div class="grid filters" id="orderFilters">
+      <div><label class="f">통합 검색어</label><input type="text" id="oKeyword" placeholder="건명·품명·업체·기관" /></div>
+      <div><label class="f">업체명</label><input type="text" id="oCorp" placeholder="업체명 (사업자번호로도 찾기)" /></div>
+      <div><label class="f">사업자등록번호</label><input type="text" id="oBizno" placeholder="숫자만" /></div>
+      <div><label class="f">업체소재지</label><input type="text" id="oCorpLoc" placeholder="예) 경기도, 대구광역시 북구" /></div>
+      <div><label class="f">수요기관</label><input type="text" id="oInstt" placeholder="예) 교육청" /></div>
+      <div><label class="f">기관지역</label><input type="text" id="oRgn" placeholder="예) 대구, 경기도 화성시" /></div>
+      <div><label class="f">품명</label><input type="text" id="oClsfc" placeholder="예) 매트" /></div>
+      <div><label class="f">세부품명 <span style="color:var(--danger)">*</span></label><input type="text" id="oDtil" placeholder="필수 — 예) 논슬립" /></div>
+      <div><label class="f">납품요구일 시작</label><input type="date" id="oFrom" /></div>
+      <div><label class="f">납품요구일 종료</label><input type="date" id="oTo" /></div>
+      <div><label class="f">금액 이상</label><input type="number" id="oAmtMin" placeholder="원" /></div>
+      <div><label class="f">금액 이하</label><input type="number" id="oAmtMax" placeholder="원" /></div>
+      <div>
+        <label class="f">정렬</label>
+        <select id="oSort">
+          <option value="recent">최신 납품요구일</option>
+          <option value="amtDesc">금액 많은 순</option>
+          <option value="amtAsc">금액 적은 순</option>
+          <option value="uprcAsc">단가 낮은 순</option>
+          <option value="uprcDesc">단가 높은 순</option>
+          <option value="instt">기관별</option>
+          <option value="corp">업체별</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px">
+      <label class="small"><input type="checkbox" id="oMine" /> 내 회사만</label>
+      <label class="small"><input type="checkbox" id="oMas" /> MAS만</label>
+      <label class="small"><input type="checkbox" id="oExclc" /> 우수제품만</label>
+      <label class="small"><input type="checkbox" id="oSme" /> 중기간경쟁제품만</label>
+      <span class="spacer"></span>
+      <button class="btn" id="oReset">초기화</button>
+      <button class="btn" id="oCsv">CSV 내보내기</button>
+      <button class="btn primary" id="oSearch">검색</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tiles" id="oSummary"></div>
+    <div class="row viewbar">
+      <label class="f" for="oView">보기</label>
+      <select id="oView">
+        <option value="list">목록 (한 줄씩)</option>
+        <optgroup label="묶어 보기">
+          <option value="month">월별</option>
+          <option value="year">연도별</option>
+          <option value="instt">수요기관별</option>
+          <option value="insttDiv">기관구분별</option>
+          <option value="rgn">기관지역별</option>
+          <option value="corp">업체별 (점유율)</option>
+          <option value="corpSido">업체소재 시·도별</option>
+          <option value="corpLoc">업체소재지별</option>
+          <option value="clsfc">품명별</option>
+          <option value="dtil">세부품명별</option>
+          <option value="spec">물품규격명별</option>
+          <option value="cncls">계약체결형태별</option>
+        </optgroup>
+      </select>
+      <select id="oGroupN" hidden title="금액이 큰 순서로 몇 줄까지 볼지">
+        <option value="10">TOP 10</option>
+        <option value="20" selected>TOP 20</option>
+        <option value="50">TOP 50</option>
+        <option value="100">TOP 100</option>
+      </select>
+      <span class="small muted" id="oViewHint"></span>
+    </div>
+    <div id="oList">
+      <div class="tablewrap"><table id="oTable"></table></div>
+      <div class="pager" id="oPager"></div>
+    </div>
+    <div id="oGroup" hidden>
+      <div class="viz" id="oGroupChart"></div>
+      <div class="tablewrap"><table id="oGroupTable"></table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── 등록품목 ───────── -->
+<section id="tab-products" hidden>
+  <div class="card">
+    <h2>쇼핑몰 등록품목 검색</h2>
+    <p class="sub">쇼핑몰에 올라와 있는 품목과 계약단가입니다. <b>검색</b>을 누르면 그 세부품명의 쇼핑몰 등록품목(최근 2년 등록분)을 아직 받지 않았거나 받은 지 30일이 지난 경우 API 로 받아 채웁니다.<br>
+      세부품명 없이 <b>계약업체</b>만 넣어도 검색합니다. 이때는 저장된 등록품목에서만 찾습니다.</p>
+    <div class="grid filters">
+      <div><label class="f">통합 검색어</label><input type="text" id="pKeyword" placeholder="품명·규격·업체·제조사" /></div>
+      <div><label class="f">구분</label><select id="pDataset"><option value="">전체</option></select></div>
+      <div><label class="f">품명</label><input type="text" id="pClsfc" /></div>
+      <div><label class="f">세부품명 <span class="muted">(또는 계약업체)</span></label><input type="text" id="pDtil" placeholder="예) 논슬립" /></div>
+      <div><label class="f">계약업체</label><input type="text" id="pCorp" placeholder="업체명 (사업자번호로도 찾기)" /></div>
+      <div><label class="f">업체소재지</label><input type="text" id="pLoc" placeholder="예) 경기도, 대구광역시 북구" /></div>
+      <div><label class="f">물품식별번호</label><input type="text" id="pIdnt" /></div>
+      <div><label class="f">단가 이상</label><input type="number" id="pMin" placeholder="원" /></div>
+      <div><label class="f">단가 이하</label><input type="number" id="pMax" placeholder="원" /></div>
+      <div>
+        <label class="f">정렬</label>
+        <select id="pSort">
+          <option value="recent">최근 등록순</option>
+          <option value="priceAsc">단가 낮은 순</option>
+          <option value="priceDesc">단가 높은 순</option>
+          <option value="corp">업체별</option>
+          <option value="name">품명순</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px">
+      <label class="small"><input type="checkbox" id="pMas" /> MAS만</label>
+      <label class="small"><input type="checkbox" id="pExclc" /> 우수제품만</label>
+      <label class="small"><input type="checkbox" id="pSme" /> 중기간경쟁제품만</label>
+      <label class="small"><input type="checkbox" id="pMine" /> 내 회사만</label>
+      <label class="small" title="기본은 지금 쇼핑몰에 있는 품목만 보여줍니다. 켜면 계약이 끝났거나 쇼핑몰에서 내려간 품목, 계약 변경 전 옛 버전까지 보여줍니다."><input type="checkbox" id="pOld" /> 계약 끝난·내려간 품목 포함</label>
+      <span class="spacer"></span>
+      <button class="btn" id="pReset">초기화</button>
+      <button class="btn" id="pCsv">CSV 내보내기</button>
+      <button class="btn primary" id="pSearch">검색</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row small muted" id="pCount"></div>
+    <div class="tablewrap" style="margin-top: 8px"><table id="pTable"></table></div>
+    <div class="pager" id="pPager"></div>
+  </div>
+</section>
+
+<!-- ───────── 물품비교 ───────── -->
+<section id="tab-compare" hidden>
+  <div class="card">
+    <h2>물품비교
+      <span class="info" tabindex="0" aria-label="물품비교 설명">i<span class="info-pop" role="tooltip">
+        <b>관심목록</b> 탭에서 비교할 물품을 체크하고 <b>비교하기</b> 를 누르면 여기서 나란히 비교합니다 (최대 8개).<br>
+        물품 위의 <b>빼기</b> 는 비교에서만 뺍니다. 관심목록에는 그대로 남습니다.<br>
+        계약단가가 가장 낮은 물품에 <b>최저</b> 를 붙이고, 나머지는 최저보다 몇 % 비싼지 보여 줍니다.<br>
+        실거래는 저장된 거래내역에서 같은 물품식별번호·같은 업체의 거래만 셉니다.<br>
+        모든 물품이 같은 값인 줄은 흐리게, 모두 비어 있는 줄은 빼고 보여 줍니다.<br>
+        이 화면은 API 를 부르지 않습니다.
+      </span></span>
+    </h2>
+    <div class="small muted" id="cmpCount" style="margin-bottom:8px"></div>
+    <div class="tablewrap"><table id="cmpTable" class="cmp"></table></div>
+  </div>
+</section>
+
+<!-- ───────── 실적 ───────── -->
+<section id="tab-mine" hidden>
+  <div id="mineNotice"></div>
+  <div class="card">
+    <h2>업체 실적
+      <span class="info" tabindex="0" aria-label="업체 실적 설명">i<span class="info-pop" role="tooltip">
+        업체를 검색해 추가하면 저장된 거래내역으로 실적을 집계합니다.<br>
+        추가한 업체가 쇼핑몰에 등록한 <b>세부품명</b>의 거래내역 가운데 고른 기간에 아직 안 받은 날짜는 조달청에서 받아 채웁니다 (자동 받기가 켜져 있으면 일수와 상관없이 오늘 남은 한도 안에서 바로).<br>
+        여러 곳을 추가하면 나란히 비교합니다 (최대 10곳).<br>
+        업체 없이 <b>세부품명·업체소재지·기관지역</b> 조건만 넣으면 조건에 맞는 상위 업체를 보여줍니다 (<b>전체</b>를 고르면 납품 실적이 없는 쇼핑몰 등록업체까지).<br>
+        업체를 추가했으면 그 업체들의 실적을 조건으로 좁혀 봅니다.<br>
+        등록품목이 저장되지 않은 업체는 <b>조달청에서 가져오기</b>(동료 PC 는 <b>관리자에게 가져오기 요청</b>)로 등록품목을 먼저 받습니다.<br>
+        그 밖의 검색·집계는 API 를 부르지 않습니다.
+      </span></span>
+    </h2>
+    <div class="row">
+      <div style="flex: 1; min-width: 260px"><label class="f">업체 추가</label><input type="text" id="pfSearch" placeholder="업체명 또는 사업자등록번호로 검색" /></div>
+      <button class="btn" id="pfFetch" type="button" title="넣은 업체명으로 조달청에서 그 업체가 지금 쇼핑몰에 올려 둔 등록품목을 받아 저장합니다 (등록일로만 찾을 수 있어 최근 3년을 1년씩 나눠 찾습니다). 한 업체에 조달청 호출 10~20회. 30일 안에 받은 업체는 다시 부르지 않습니다. 거래내역은 업체를 추가하면 그 업체가 등록한 세부품명으로 고른 기간만큼 채웁니다. 동료가 요청한 업체는 올해 거래내역까지 한 번에 받아 줍니다.">조달청에서 가져오기</button>
+      <div class="yearpick">
+        <label class="f">연도</label>
+        <button class="btn" id="pfYearBtn" type="button" title="체크한 해만 집계합니다 (떨어진 해도 고를 수 있음)">연도 선택 ▾</button>
+        <div class="yearpop" id="pfYearPop" hidden></div>
+      </div>
+      <div><label class="f">시작일</label><input type="date" id="mFrom" /></div>
+      <div><label class="f">종료일</label><input type="date" id="mTo" /></div>
+      <button class="btn" id="pfMine" title="수집 · 설정 → 설정에 등록한 내 회사를 추가합니다">내 회사 불러오기</button>
+      <button class="btn primary" id="mRun">집계</button>
+    </div>
+    <div class="row pf-cond" style="margin-top: 10px">
+      <div><label class="f">세부품명</label><input type="text" id="pfCondDtil" placeholder="예) 차양" /></div>
+      <div><label class="f">업체소재지</label><input type="text" id="pfCondLoc" placeholder="예) 대구, 경기도 화성시" /></div>
+      <div><label class="f">기관지역 <span class="muted">(납품한 곳)</span></label><input type="text" id="pfCondRgn" placeholder="예) 서울특별시" /></div>
+      <div>
+        <label class="f">업체를 안 고르면</label>
+        <select id="pfTopN" title="업체를 추가하지 않고 조건만 넣으면, 조건에 맞는 업체를 금액 큰 순으로 이만큼 보여줍니다. 차트는 상위 7곳만 따로 그리고 나머지는 &quot;그 외&quot; 로 합칩니다.">
+          <option value="0">전체</option>
+          <option value="3">상위 3곳</option>
+          <option value="5" selected>상위 5곳</option>
+          <option value="10">상위 10곳</option>
+          <option value="20">상위 20곳</option>
+          <option value="30">상위 30곳</option>
+        </select>
+      </div>
+      <button class="btn" id="pfCondClear" type="button">조건 지우기</button>
+    </div>
+    <div id="pfFetchResult"></div>
+    <div class="chips" id="pfChips" style="margin-top: 10px"></div>
+    <div class="row pf-sort" id="pfSortRow" hidden>
+      <label class="small muted" for="pfSort">정렬</label>
+      <select id="pfSort">
+        <option value="amt">납품 금액 많은 순</option>
+        <option value="last">최근 거래 순</option>
+        <option value="name">업체명 순</option>
+        <option value="added">추가한 순서</option>
+      </select>
+    </div>
+    <div class="tablewrap" style="margin-top: 12px"><table id="pfSummary"></table></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>기간별 실적</h2>
+      <div class="row" style="gap: 8px">
+        <div class="yearpick dtilpick">
+          <button class="btn" id="pfDtilBtn" type="button" title="체크하지 않으면 업체별로 전체 품목 합계를, 체크하면 품목마다 따로 그립니다. 업체가 여럿이면 품목마다 차트를 나눠 업체별로 보여 줍니다 (최대 8개).">전체 품목 ▾</button>
+          <div class="yearpop" id="pfDtilPop" hidden></div>
+        </div>
+        <select id="pfPeriod">
+          <option value="year">연도별</option>
+          <option value="quarter">분기별</option>
+          <option value="month" selected>월별</option>
+        </select>
+      </div>
+    </div>
+    <div class="viz-legend" id="pfPeriodLegend"></div>
+    <div class="viz" id="pfPeriodChart"></div>
+    <details class="viz-table"><summary>표로 보기</summary><div class="tablewrap"><table id="pfPeriodTable"></table><div id="pfPeriodMore"></div></div></details>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>수요기관 TOP <span class="small muted" id="pfInsttDtil" title="기간별 실적의 품목 드롭다운을 따라갑니다"></span></h2>
+      <select id="pfInsttN">
+        <option value="0">전체</option>
+        <option value="5">TOP 5</option>
+        <option value="10" selected>TOP 10</option>
+        <option value="20">TOP 20</option>
+      </select>
+    </div>
+    <div class="tablewrap"><table id="pfInstt"></table></div>
+  </div>
+</section>
+
+<!-- ───────── 관심목록 ───────── -->
+<section id="tab-marks" hidden>
+  <div class="card">
+    <h2>관심목록</h2>
+    <p class="sub">등록품목·거래내역 검색 결과에서 ★ 를 누른 물품이 세부품명별로 모입니다. 단가는 지금 계약단가이고, 메모를 적어 둘 수 있습니다.<br>
+      비교할 물품을 체크하고(최대 8개) <b>비교하기</b> 를 누르면 물품비교 탭에서 나란히 비교합니다. 다른 칩으로 옮겨 가도 체크는 남습니다.</p>
+    <div class="chips cmp-chips" id="bChips"></div>
+    <div class="row cmp-tools" id="mTools" hidden>
+      <input type="text" id="mFind" placeholder="업체·규격·메모로 찾기 (예: 1000×1000)" />
+      <select id="mSort">
+        <option value="corp">업체순</option>
+        <option value="price">계약단가 낮은 순</option>
+        <option value="recent">담은 순서 (최근 먼저)</option>
+      </select>
+      <button class="btn" id="mAll" type="button">보이는 것 모두 체크</button>
+      <button class="btn" id="mNone" type="button">체크 모두 풀기</button>
+      <span class="small muted" id="mCount"></span>
+      <button class="btn primary" id="mGo" type="button" disabled>비교하기</button>
+    </div>
+    <div id="mNote"></div>
+    <div class="tablewrap"><table id="bTable"></table></div>
+  </div>
+</section>
+
+<!-- ───────── 설정 ───────── -->
+<section id="tab-settings" hidden>
+  <div class="card" id="pubCard">
+    <h2>동료 배포 <span class="small muted">(검색 전용 프로그램)</span></h2>
+    <p class="sub">
+      자료는 <b>이 PC 만 받고</b>, 동료 PC 는 이 PC 가 배포한 자료로 <b>검색만</b> 합니다. 동료 PC 는 서비스키·OneDrive 로그인이 필요 없고, 이 PC 가 꺼져 있어도 검색됩니다.
+      자동 배포를 켜 두면 이 PC 가 새 자료를 받을 때마다 몇 분 안에 <b>바뀐 줄만</b> 배포 폴더에 올라가고, 동료 PC 가 알아서 받아 합칩니다.
+      서비스키·설정·관심목록·API 사용량은 배포하지 않습니다.
+    </p>
+    <div class="row">
+      <label class="small"><input type="checkbox" id="pubEnable" /> 자동 배포</label>
+      <span class="spacer"></span>
+      <button class="btn" id="pubBase" title="변경분을 모두 합쳐 전체 자료를 새로 만듭니다 (보통은 자동)">기본자료 새로 만들기</button>
+      <button class="btn primary" id="pubNow">지금 배포</button>
+    </div>
+    <div id="pubState" style="margin-top: 8px"></div>
+    <div class="small muted" style="margin-top: 6px">배포 폴더: <code id="pubDir"></code></div>
+    <details class="pub-steps">
+      <summary>동료 PC 에 설치하는 방법</summary>
+      <ol class="small">
+        <li>위 <b>자동 배포</b>를 켜서 기본자료를 한 번 만듭니다 (처음엔 몇십 초 걸립니다).</li>
+        <li>파일 탐색기에서 <b>배포 폴더</b>를 오른쪽 클릭 → <b>공유</b> → 링크 설정을 <b>"링크가 있는 모든 사용자"·보기 가능</b>으로 하고 <b>링크 복사</b>.</li>
+        <li>복사한 링크를 아래에 붙여넣고 <b>동료용 프로그램 만들기</b>를 누르면 배포 폴더에 <code>G2B Finder 검색용.zip</code> 이 생깁니다.</li>
+        <li>동료는 같은 링크를 브라우저로 열어 zip 을 받고, 원하는 곳(예: 문서 폴더)에 압축을 푼 뒤 <b>G2B Finder 검색용.vbs</b> 를 더블클릭합니다. 처음엔 자료를 받느라 1~3분 걸립니다.</li>
+      </ol>
+    </details>
+    <div class="row" style="margin-top: 8px">
+      <input type="text" id="pubLink" placeholder="배포 폴더 공유 링크 — https://1drv.ms/f/…" style="flex: 1; min-width: 260px" />
+      <button class="btn" id="pubZip">동료용 프로그램 만들기</button>
+    </div>
+    <div id="pubZipInfo" style="margin-top: 4px"></div>
+
+    <h3 style="margin: 18px 0 4px; font-size: 14px">동료 요청 받기 <span class="small muted">(동료가 없는 자료를 요청하는 곳)</span></h3>
+    <p class="sub">
+      동료 PC 는 조달청 API 를 부르지 않아서, 배포되지 않은 기간은 비어 있습니다. 이걸 켜 두면 동료가 그 화면에서 <b>요청 보내기</b>를 눌러 이 PC 에 알릴 수 있습니다.
+      오가는 것은 <b>요청 쪽지(1KB 미만)</b> 뿐이고, 요청은 <b>현황 · 수집</b> 화면에 쌓입니다.
+    </p>
+    <div class="row">
+      <label class="small"><input type="checkbox" id="reqOn" /> 동료 요청 받기</label>
+      <label class="small" title="사람이 누르지 않아도 이 PC 가 알아서 받습니다. 하루 API 한도가 모자라거나 기간이 아주 길면 미루고 알려 줍니다."><input type="checkbox" id="reqAuto" /> 저절로 받기</label>
+    </div>
+    <details class="pub-steps" id="reqStepsShared">
+      <summary>요청 받기를 켜는 방법</summary>
+      <ol class="small">
+        <li>파일 탐색기에서 <b>배포 폴더</b>를 오른쪽 클릭 → <b>공유</b> → 링크 설정을 <b>"링크가 있는 모든 사용자"</b>로 하고 <b>편집 가능</b>에 체크한 뒤 <b>링크 복사</b>.</li>
+        <li>OneDrive 는 편집 가능으로 바꿀 때 <b>주소가 다른 새 링크</b>를 만들기도 합니다. 그럴 땐 새 링크를 위 <b>배포 폴더 공유 링크</b> 칸에 넣고 <b>동료용 프로그램 만들기</b>를 다시 누르세요.
+          이미 설치한 동료는 예전 링크로 자료를 계속 받으니 다시 깔 필요가 없습니다 — <b>예전 링크를 지우지만 마세요.</b></li>
+        <li><b>연결 시험</b>을 누르면 동료가 하는 것과 똑같이 쪽지를 한 장 올려 보고 되는지 알려 줍니다.</li>
+      </ol>
+      <p class="small muted">
+        링크가 편집 가능이면, 링크를 아는 사람이 배포 폴더의 파일을 지우거나 바꿀 수도 있습니다.
+        다만 배포 파일은 모두 이 PC 의 <code>data/app.db</code> 에서 다시 만들 수 있고, 파일이 바뀌면 동료 프로그램이 검사값으로 걸러 내니
+        망가져도 <b>지금 배포</b>를 한 번 누르면 됩니다. 그래도 걱정되면 아래 <b>따로 두기</b>를 쓰세요.
+      </p>
+    </details>
+    <div class="row" style="margin-top: 8px">
+      <button class="btn" id="reqSave">연결 시험</button>
+      <span class="small muted">요청함 폴더: <code id="reqDir"></code></span>
+    </div>
+    <div id="reqLinkInfo" style="margin-top: 4px"></div>
+  </div>
+  <div class="card">
+    <h2>서비스키</h2>
+    <p class="sub">
+      공공데이터포털
+      <a href="https://www.data.go.kr/data/15129471/openapi.do" target="_blank" rel="noreferrer">조달청_나라장터쇼핑몰 품목정보 서비스</a>
+      에서 활용신청(자동승인)한 뒤, 마이페이지의 <b>일반 인증키(Decoding)</b> 를 붙여넣으세요.
+      <code>.env</code> 의 <code>G2B_SERVICE_KEY</code> 로 넣어도 됩니다(그쪽이 우선).
+    </p>
+    <div class="row">
+      <input type="text" id="setKey" placeholder="일반 인증키(Decoding)" style="flex:1; min-width:260px" />
+      <button class="btn primary" id="setKeySave">저장</button>
+    </div>
+    <div class="row small" style="margin-top: 8px">
+      <label><input type="checkbox" id="setMock" /> 샘플 데이터 모드 강제 (키가 있어도 가짜 데이터 사용)</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>내 회사</h2>
+    <p class="sub">여기에 적은 업체가 "내 회사만" 필터의 기준이 되고, 업체 실적 탭에서 "내 회사 불러오기"로 한 번에 추가됩니다. 법인이 여러 개면 여러 줄로 넣으세요.</p>
+    <div id="corpRows"></div>
+    <div class="row" style="margin-top: 8px">
+      <button class="btn" id="corpAdd">+ 회사 추가</button>
+      <span class="spacer"></span>
+      <button class="btn primary" id="corpSave">저장</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>세부품명 자동완성 목록</h2>
+    <p class="sub">
+      <a href="https://www.data.go.kr/data/15129417/openapi.do" target="_blank" rel="noreferrer">조달청_물품목록정보서비스</a>
+      에서 세부품명·품명 전체 목록을 받아 두고, 세부품명·품명 칸에 글자를 치면 후보를 보여줍니다 (초성·번호로도 찾기).
+      30일마다 앱이 뒤에서 새로 받습니다 (약 36회 호출).
+    </p>
+    <div class="row">
+      <span class="small" id="clsfcInfo">확인 중…</span>
+      <span class="spacer"></span>
+      <button class="btn" id="clsfcSync">지금 새로 받기</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>업체 소재지 채우기</h2>
+    <p class="sub">
+      <a href="https://www.data.go.kr/data/15129466/openapi.do" target="_blank" rel="noreferrer">조달청_나라장터 사용자정보 서비스</a>
+      로 소재지를 모르는 업체의 본사 소재지를 받아 거래내역·등록품목의 <b>업체소재지</b>에 씁니다.
+      업체 한 곳에 1회 호출이라, 거래 금액이 큰 업체부터 <b>오늘 남은 한도에서 300회를 남기고</b> 한 번에 최대 400곳씩 채웁니다.
+      서버가 켜질 때, 수집·가져오기가 끝날 때, 3시간마다 뒤에서 이어서 합니다.
+      모르는 업체를 다 채우면, 파일에서 온 계약 당시 지역 이름(전라북도·강원도 등)도 지금 이름으로 맞춥니다.
+    </p>
+    <div class="row">
+      <span class="small" id="corpLocInfo">확인 중…</span>
+      <span class="spacer"></span>
+      <button class="btn" id="corpLocFill">지금 채우기</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>검색할 때 빠진 날짜 자동으로 받기</h2>
+    <p class="sub">
+      거래내역에서 <b>검색</b> 을 누르면, 그 기간 가운데 아직 저장되지 않은 날짜만 API 로 받아
+      채운 뒤 결과를 보여줍니다. 이미 받은 날짜는 API 를 부르지 않습니다.
+      빠진 날짜가 아래 일수보다 많거나 예상 호출 수가 오늘 남은 한도를 넘으면, 자동으로 받지 않고 버튼으로 물어봅니다.
+    </p>
+    <div class="row">
+      <label class="small"><input type="checkbox" id="setAutoFill" /> 자동으로 받기</label>
+      <div><label class="f">자동으로 받을 최대 일수</label><input type="number" id="setAutoMax" min="1" max="366" style="width:120px" /></div>
+      <span class="spacer"></span>
+      <button class="btn" id="setAutoSave">저장</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>API 사용량</h2>
+    <p class="sub">개발계정 기본 한도는 하루 1,000회입니다. 오늘 사용한 횟수를 오퍼레이션별로 보여줍니다.</p>
+    <div class="row">
+      <div><label class="f">하루 한도</label><input type="number" id="setLimit" min="100" step="100" /></div>
+      <span class="spacer"></span>
+      <button class="btn" id="setLimitSave">한도 저장</button>
+    </div>
+    <div class="tablewrap" style="margin-top: 10px"><table id="usageTable"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>엔드포인트</h2>
+    <p class="sub">조달청이 주소를 바꾼 경우에만 고치세요. 비우면 기본값을 씁니다.</p>
+    <div class="row">
+      <input type="text" id="setBase" style="flex:1; min-width:280px" />
+      <button class="btn" id="setBaseSave">저장</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<datalist id="dlCorp"></datalist>
+<datalist id="dlInstt"></datalist>
+<datalist id="dlRgn"></datalist>
+<datalist id="dlClsfc"></datalist>
+<datalist id="dlDtil"></datalist>
+<datalist id="dlProductDtil"></datalist>
+<datalist id="dlProductCorp"></datalist>
+
+<script src="mobile.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

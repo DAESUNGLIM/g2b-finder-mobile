@@ -1,0 +1,460 @@
+:root {
+  --bg: #f4f6fa;
+  --panel: #ffffff;
+  --panel-2: #fbfcfe;
+  --line: #dfe4ec;
+  --line-soft: #eceff5;
+  --text: #1b2330;
+  --muted: #6b7686;
+  --brand: #14509b;
+  --brand-soft: #e8f0fb;
+  --accent: #0f7a5a;
+  --warn: #b4501a;
+  --danger: #b3261e;
+  --grp-bg: #e9eef7;
+  --shadow: 0 1px 2px rgba(20, 35, 60, 0.06), 0 6px 18px rgba(20, 35, 60, 0.05);
+  --radius: 10px;
+}
+
+:root[data-theme='dark'] {
+  --bg: #10141b;
+  --panel: #171d26;
+  --panel-2: #1c232e;
+  --line: #2a3442;
+  --line-soft: #222a36;
+  --text: #e6ebf2;
+  --muted: #94a1b3;
+  --brand: #5ea0ec;
+  --brand-soft: #1b2c42;
+  --accent: #4bbd93;
+  --warn: #e2914f;
+  --danger: #f08379;
+  --grp-bg: #252f3d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 'Malgun Gothic', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+a { color: var(--brand); }
+
+/* ── 헤더 ───────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.brand { font-weight: 700; font-size: 16px; letter-spacing: -0.3px; }
+.brand span { color: var(--brand); }
+.headinfo { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 12px; color: var(--muted); white-space: nowrap;
+}
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.badge.ok { color: var(--accent); border-color: var(--accent); }
+
+nav {
+  display: flex; gap: 2px; padding: 0 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+nav button {
+  border: 0; background: none; color: var(--muted);
+  padding: 11px 14px; font-size: 14px; cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+nav button:hover { color: var(--text); }
+nav button.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+
+main { padding: 16px; max-width: 1500px; margin: 0 auto; }
+
+/* 거래내역 결과의 보기 전환 줄 */
+.viewbar { margin: 14px 0 10px; gap: 8px; align-items: center; }
+.viewbar label.f { margin: 0; }
+.viewbar select { width: auto; }
+#oGroupChart { margin-bottom: 12px; }
+#oGroupTable tfoot td { border-top: 1px solid var(--line); }
+
+/* 묶인 탭의 하위 메뉴 — 알약 모양 버튼 한 줄 */
+.subnav {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 14px;
+  width: fit-content; max-width: 100%; overflow-x: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+}
+.subnav[hidden] { display: none; }
+.subnav button {
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  padding: 6px 16px; font-size: 13px; border-radius: 999px; white-space: nowrap;
+}
+.subnav button:hover { color: var(--text); }
+.subnav button.on { background: var(--brand); color: #fff; font-weight: 600; }
+section[hidden] { display: none; }
+
+/* ── 공통 ───────────────────────────────────────────── */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.card > h2 { margin: 0 0 4px; font-size: 15px; }
+.card > .sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+
+.grid { display: grid; gap: 10px; }
+.filters { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-items: end; }
+
+label.f { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+
+input[type='text'], input[type='number'], input[type='date'], select, textarea {
+  width: 100%; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel-2); color: var(--text);
+  font: inherit; font-size: 13px;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--brand-soft); border-color: var(--brand);
+}
+
+button.btn {
+  padding: 7px 14px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  font: inherit; font-size: 13px;
+}
+button.btn:hover { border-color: var(--brand); color: var(--brand); }
+button.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+button.btn.primary:hover { opacity: 0.9; color: #fff; }
+button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.right { text-align: right; }
+.nowrap { white-space: nowrap; }
+
+/* ── 통계 타일 ──────────────────────────────────────── */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile {
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: 9px; padding: 11px 13px;
+}
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 19px; font-weight: 700; letter-spacing: -0.4px; margin-top: 2px; }
+.tile .u { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+/* ── 표 ─────────────────────────────────────────────── */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 9px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  position: sticky; top: 0;
+  background: var(--panel-2); color: var(--muted);
+  font-weight: 600; font-size: 12px; text-align: left;
+  padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+tbody td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+tbody tr:hover { background: var(--brand-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 등록품목 — 품목마다 두 줄 */
+tr.prod > td { padding: 6px 10px; }
+tr.prod .loc { color: var(--text); }
+tr.prod > td:nth-child(2) { white-space: nowrap; }
+/* 물품 사진 — 두 줄 높이에 맞춘 작은 그림, 올리면 크게 */
+.prod-item { display: flex; align-items: center; gap: 10px; }
+.thumb {
+  position: relative; display: block; flex: none; width: 40px; height: 40px; border-radius: 6px;
+  border: 1px solid var(--line-soft); background: #fff;
+}
+.thumb.none { background: var(--panel-2); }
+.thumb > img { width: 100%; height: 100%; object-fit: contain; border-radius: 5px; display: block; }
+.thumb:not(.none):hover { border-color: var(--brand); }
+/* 물품비교 */
+.cmp-chips { margin-bottom: 10px; }
+/* 관심목록 */
+#bTable th.mk-cb { width: 28px; }
+#bTable td { vertical-align: middle; }
+#bTable th.mk-img { width: 52px; }
+#bTable tr.mk-on td { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+#bTable tr.mk-group th { text-align: left; background: var(--panel-2); padding: 6px 10px; font-size: 13px; }
+#bTable input[data-memo] { min-width: 140px; }
+.cmp-chips .chip b { font-variant-numeric: tabular-nums; }
+.cmp-k-n { margin-left: 2px; padding: 0 6px; border-radius: 9px; background: var(--brand); color: #fff; font-size: 11px; }
+.cmp-tools[hidden] { display: none; }
+.cmp-tools { gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+.cmp-tools #mFind { flex: 1 1 260px; width: auto; min-width: 200px; }
+.cmp-tools select { width: auto; flex: none; }
+table.cmp { table-layout: fixed; min-width: 640px; }
+table.cmp th.cmp-k { width: 120px; text-align: left; color: var(--muted); font-weight: 600; background: var(--panel-2); white-space: nowrap; }
+table.cmp tbody th.cmp-k { border-bottom: 1px solid var(--line-soft); padding: 8px 10px; font-size: 12px; }
+table.cmp thead th { text-align: right; }
+table.cmp td { vertical-align: top; word-break: keep-all; overflow-wrap: anywhere; }
+table.cmp tr.cmp-same td { color: var(--muted); }
+.thumb.big { width: 120px; height: 120px; }
+
+/* ★ — 관심목록에 담긴 물품 */
+button[data-mark].marked { background: #f5b301; border-color: #e0a200; color: #fff; }
+button[data-mark].marked:hover { background: #e0a200; }
+
+.thumb-pop {
+  position: fixed; z-index: 100; pointer-events: none;
+  width: 260px; height: 260px; padding: 6px; background: #fff;
+  border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(20, 35, 60, 0.18);
+}
+.thumb-pop img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+.pill {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 11px; border: 1px solid var(--line); color: var(--muted);
+  margin-right: 3px;
+}
+.pill.mas { color: var(--brand); border-color: var(--brand); }
+.pill.exclc { color: var(--accent); border-color: var(--accent); }
+.pill.sme { color: var(--warn); border-color: var(--warn); }
+.pill.mine { background: var(--brand); border-color: var(--brand); color: #fff; }
+/* 변경된 납품요구 — 누르면 차수별 이력이 펼쳐진다 */
+button.pill.chg, .pill.chg-flat {
+  color: var(--warn); border-color: var(--warn); background: transparent;
+  font: inherit; font-size: 11px; padding: 1px 6px; cursor: pointer;
+}
+.pill.chg-flat { cursor: default; }
+button.pill.chg:hover { background: var(--warn); color: #fff; }
+
+/* ── 거래내역: 납품요구별로 묶기 · 변경 이력 ──────────── */
+
+tr.grp > td { background: var(--grp-bg); border-top: 2px solid var(--line); padding: 7px 10px 6px; }
+.grp-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.grp-no { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--brand); }
+/* 건명이 남는 자리를 채우고, 품목 수·합계는 오른쪽 끝으로 밀린다 */
+.grp-nm { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 날짜는 건명 뒤 빈자리에, 품목 수·합계는 오른쪽 끝에 */
+.grp-date { margin-left: auto; }
+.grp-cnt { margin-left: 4px; }
+.grp-amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.grp-sub { margin-top: 1px; }
+.dim { opacity: 0.65; }
+
+/* 품목은 한 줄씩 — 순번 · 납품업체 · 규격 */
+tr.grp-item > td { padding: 4px 10px; vertical-align: middle; }
+tr.grp-item > td:first-child { padding-left: 22px; }
+/* 품목 줄은 본문 글자색 그대로 — 흐리게 하지 않는다 */
+tr.grp-item > td, tr.grp-item .sno, tr.grp-item .dim { color: var(--text); }
+tr.grp-item .dim { opacity: 1; }
+tr.grp-item button.btn.small { padding: 1px 7px; line-height: 1.5; }
+.sno {
+  display: inline-block; min-width: 14px; margin-right: 5px;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+}
+/* 납품업체는 품목마다 순번 옆에 — 짧은 이름끼리는 줄이 맞도록 최소 너비를 준다 */
+.it-corp { display: inline-block; min-width: 150px; margin-right: 10px; white-space: nowrap; }
+/* 물품식별번호 — 글자 모양은 양옆(업체명·규격)과 같게 두고 자리만 띄운다 */
+.it-id { display: inline-block; margin-right: 10px; font-variant-numeric: tabular-nums; }
+/* 칸 너비를 못 박아 둔다 — 묶음 머리줄(colspan)이 숫자 칸을 밀어내지 못하게 */
+#oTable { table-layout: fixed; min-width: 780px; }
+#oTable col.c-uprc { width: 96px; }
+#oTable col.c-qty { width: 92px; }
+#oTable col.c-amt { width: 122px; }
+#oTable col.c-star { width: 44px; }
+
+tr.hist > td { background: var(--panel-2); padding: 10px 14px; }
+.hist-box { overflow-x: auto; }
+.hist-tbl { width: auto; min-width: 420px; font-size: 12px; }
+.hist-tbl th, .hist-tbl td { padding: 3px 10px; }
+.hist-tbl tr.on { background: var(--brand-soft); }
+.hist-tbl tr.on td { font-weight: 600; }
+
+/* ── 막대 (집계) ────────────────────────────────────── */
+.bar { background: var(--line-soft); border-radius: 4px; height: 9px; overflow: hidden; min-width: 60px; }
+.bar > i { display: block; height: 100%; background: var(--brand); }
+
+/* ── 진행 상태 ──────────────────────────────────────── */
+.progress { height: 6px; background: var(--line-soft); border-radius: 999px; overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
+
+.log {
+  background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 7px;
+  padding: 8px 10px; font-size: 12px; max-height: 150px; overflow: auto;
+  font-family: Consolas, 'D2Coding', monospace; white-space: pre-wrap;
+}
+
+.notice {
+  border-left: 3px solid var(--brand); background: var(--brand-soft);
+  padding: 9px 12px; border-radius: 0 7px 7px 0; font-size: 13px; margin-bottom: 12px;
+}
+.notice.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.notice.err { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+.empty { padding: 34px 16px; text-align: center; color: var(--muted); }
+
+.pager { display: flex; gap: 6px; align-items: center; justify-content: center; padding: 10px 0 2px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+  border-radius: 999px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+}
+.chip:hover, .chip.on { border-color: var(--brand); color: var(--brand); }
+
+.corprow { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 8px; }
+
+@media (max-width: 640px) {
+  main { padding: 10px; }
+  .card { padding: 12px; }
+  .filters { grid-template-columns: 1fr 1fr; }
+  .corprow { grid-template-columns: 1fr; }
+}
+
+/* 세부품명·품명 자동완성 */
+.ac-host { position: relative; }
+.ac {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 50;
+  margin-top: 2px; max-height: 320px; overflow-y: auto; min-width: 260px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
+}
+.ac-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 7px 10px; cursor: pointer; }
+.ac-item + .ac-item { border-top: 1px solid var(--line-soft); }
+.ac-item.on, .ac-item:hover { background: var(--brand-soft); }
+.ac-name { font-weight: 600; }
+.ac-sub { color: var(--muted); font-size: 12px; }
+.ac-cnt { margin-left: auto; color: var(--accent); font-size: 12px; white-space: nowrap; }
+.ac-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
+
+/* 실적 차트 — 업체별 계열 색 (검증된 8색 팔레트, 추가한 순서대로 고정).
+   9·10번째 업체는 색을 새로 만들지 않고 무채색 두 단계 — 범례·막대 툴팁·표로 함께 구분한다.
+   (바로 옆 막대끼리 일반 시력 ΔE ≥ 15 확인, 색각 이상은 7~8 이라 범례·툴팁·표가 꼭 함께 있어야 한다) */
+:root {
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  --s9: #5b6573; --s10: #9aa3ae;
+}
+:root[data-theme='dark'] {
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --s9: #8c95a0; --s10: #56606b;
+}
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.corp-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--panel-2);
+}
+.corp-chip .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 4px; }
+.corp-chip .x:hover { color: var(--danger); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.card-head h2 { margin: 0; font-size: 15px; }
+.card-head select { width: auto; }
+#pfDtil { max-width: 260px; }
+.viz { overflow-x: auto; }
+.viz svg { display: block; }
+.viz svg .grid { stroke: var(--line-soft); stroke-width: 1; }
+.viz svg .axis { stroke: var(--line); stroke-width: 1; }
+.viz svg .tick { fill: var(--muted); font-size: 11px; }
+.viz svg .cat { fill: var(--text); font-size: 12px; }
+.viz svg path[data-tip]:hover { opacity: 0.8; }
+.viz .empty { padding: 24px; text-align: center; color: var(--muted); }
+.viz-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.viz-legend:empty { display: none; }
+/* 제목 옆 ⓘ — 마우스를 올리거나(키보드로 가면) 설명이 뜬다 */
+.info:not(.notice) {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; margin-left: 6px; vertical-align: 2px;
+  border: 1.5px solid var(--muted); border-radius: 50%; color: var(--muted);
+  font: italic 700 11px/1 Georgia, 'Times New Roman', serif; cursor: help; user-select: none;
+}
+.info:not(.notice):hover, .info:not(.notice):focus { border-color: var(--brand); color: var(--brand); outline: none; }
+.info-pop {
+  display: none; position: absolute; left: -8px; top: calc(100% + 8px); z-index: 60;
+  width: max-content; max-width: min(780px, calc(100vw - 48px));
+  padding: 10px 13px; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(20, 35, 60, 0.18);
+  font-family: inherit; font-size: 13px; font-weight: 400; font-style: normal; line-height: 1.65;
+  text-align: left; white-space: normal; cursor: auto;
+}
+.info:hover .info-pop, .info:focus .info-pop { display: block; }
+
+.viz-tip {
+  position: fixed; z-index: 100; pointer-events: none; padding: 6px 9px; font-size: 12px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow);
+}
+.viz-table { margin-top: 8px; }
+.viz-table summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+
+/* ── 실적: 연도 선택 ─────────────────────────────────── */
+.yearpick { position: relative; }
+.yearpick .btn { min-width: 120px; text-align: left; }
+.yearpop {
+  position: absolute; z-index: 30; top: 100%; left: 0; margin-top: 4px;
+  min-width: 180px; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); box-shadow: var(--shadow);
+}
+.yearpop[hidden] { display: none; }
+.yearpop label { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.yearpop label:hover { background: var(--brand-soft); }
+.yearpop .yp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.yearpop .yp-foot { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
+
+/* 품목 체크 목록 — 오른쪽 끝에 붙여 화면 밖으로 나가지 않게 */
+.dtilpick .btn { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dtilpick .yearpop { left: auto; right: 0; width: min(360px, calc(100vw - 32px)); }
+.dtilpick .dp-list { max-height: 320px; overflow-y: auto; }
+.dtilpick .dp-list label { justify-content: space-between; }
+.dtilpick .dp-list label > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dtilpick .dp-list label.off { opacity: 0.45; cursor: not-allowed; }
+.dtilpick .dp-note { font-size: 12px; color: var(--muted); padding: 2px 6px 6px; }
+
+/* 기간별 실적 — 품목별 작은 차트 */
+#pfPeriodChart.pf-multi { overflow: visible; }
+/* 업체 칸이 많아져도 첫 칸(기관명·기간)은 읽히게 — 넘치면 표가 옆으로 스크롤된다 */
+#pfInstt td:first-child, #pfInstt th:first-child { min-width: 200px; }
+#pfPeriodTable td:first-child, #pfPeriodTable th:first-child { min-width: 90px; white-space: nowrap; }
+#pfPeriodChart .pf-mc + .pf-mc { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.pf-mh { font-size: 13px; font-weight: 600; margin: 0 0 4px; }
+#pfPeriodMore .pf-mh { margin-top: 12px; }
+
+/* ── 동료 배포 · 검색 전용 ─────────────────────────────── */
+body.viewer .admin-only { display: none !important; }
+.pub-steps { margin-top: 10px; }
+.pub-steps summary { cursor: pointer; font-size: 13px; color: var(--brand); }
+.pub-steps ol { margin: 6px 0 0; padding-left: 20px; line-height: 1.7; }
+
+.badge[hidden] { display: none; }
+
+/* ── 실적: 업체 × 품목 요약표 ────────────────────────── */
+#pfSummary tbody + tbody tr:first-child td { border-top: 1px solid var(--line); }
+#pfSummary tr.pf-sub td { background: var(--panel-2); }
+.pf-loc { color: var(--muted); margin-left: 4px; white-space: nowrap; }
+.pf-sort { justify-content: flex-end; align-items: center; gap: 6px; margin-top: 10px; }
+.pf-sort[hidden] { display: none; }
+.pf-sort select { width: auto; }
+#pfSummary tr.pf-item td:nth-child(2) { padding-left: 22px; }
+#pfSummary tbody:not(.open) tr.pf-more { display: none; }
+#pfSummary tr.pf-toggle td { cursor: pointer; color: var(--brand); font-size: 12px; }
+#pfSummary tfoot td { border-top: 2px solid var(--line); background: var(--brand-soft); font-weight: 600; padding: 8px 10px; }
+#pfSummary tbody.open .when-closed, #pfSummary tbody:not(.open) .when-open { display: none; }
+button.btn.small { padding: 4px 10px; font-size: 12px; }
+
+/* 거래내역 목록의 납품요구명 — 길면 줄바꿈 */
+#oTable td.req-nm { min-width: 180px; max-width: 300px; }
+#oTable td:nth-child(3), #oTable td:nth-child(4) { min-width: 130px; }
+/* 실적: 조건만 넣었을 때 자동으로 고른 업체 (점선 = 고정 안 됨) */
+.corp-chip.auto { border-style: dashed; }
+.corp-chip .x.pin { font-size: 12px; }
+.corp-chip .x.pin:hover { color: var(--brand); }
+.pf-cond > div { min-width: 170px; }
+/* 기간 그래프 두 줄 축: 연도 글자와 해가 바뀌는 곳의 세로선 */
+.viz svg .tick.year { fill: var(--text); font-weight: 600; }
+.viz svg .yearsep { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }

@@ -1,0 +1,117 @@
+/* 모바일 검색용 — PC 화면(styles.css)을 휴대폰 폭에 맞추는 것만 덧붙인다 */
+
+/* 휴대폰에서는 서버를 끌 일이 없고, 수집·설정 화면도 없다 (켜지는 동안 잠깐 비치지 않게 처음부터 숨긴다) */
+.mobile #quitBtn,
+.mobile #tab-home,
+.mobile #tab-settings,
+.mobile .admin-only { display: none !important; }
+
+/* 처음 실행·내려받기 화면 */
+#mVeil {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+#mVeil[hidden] { display: none; }
+#mVeil .m-box {
+  width: 100%; max-width: 440px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 20px 18px;
+}
+#mVeil h2 { margin: 0 0 12px; font-size: 18px; }
+#mVeil input { width: 100%; padding: 11px 12px; font-size: 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--text); margin: 6px 0 10px; }
+#mVeil .btn { width: 100%; padding: 11px; font-size: 15px; margin-top: 6px; }
+#mVeil .m-bar { height: 8px; border-radius: 4px; background: var(--line-soft); margin: 12px 0 6px; overflow: hidden; }
+#mVeil .m-bar > div { height: 100%; background: var(--brand); transition: width 0.3s; }
+
+.m-more-btn { display: none; }
+
+@media (max-width: 760px) {
+  /* 머리줄: 제목 한 줄 + 배지 — 내리면 같이 올라가고 탭만 위에 남는다 */
+  header { position: static; padding: 8px 12px; gap: 6px 10px; padding-top: max(8px, env(safe-area-inset-top)); }
+  header > .small.muted { display: none; }
+  .headinfo { gap: 6px; }
+  .headinfo .badge { font-size: 11px; padding: 2px 7px; }
+
+  /* 탭: 화면 위에 붙어서 옆으로 밀어 넘기기 */
+  nav { position: sticky; top: 0; z-index: 19; padding: 0 4px; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav button { padding: 11px 11px; font-size: 14px; }
+
+  main { padding: 10px 10px calc(16px + env(safe-area-inset-bottom)); }
+  .card { padding: 12px; border-radius: 12px; }
+  .card > .sub { font-size: 12px; }
+
+  /* 입력칸은 16px 이상이어야 아이폰이 확대하지 않는다 */
+  input[type='text'], input[type='number'], input[type='date'], input[type='search'], select, textarea { font-size: 16px; padding: 9px 10px; }
+  button.btn { padding: 9px 14px; font-size: 14px; }
+
+  /* 조건 칸은 두 칸씩, 자주 쓰는 칸만 보이고 나머지는 "조건 더 보기" (mobile.js compactFilters) */
+  .filters { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .filters .m-more { display: none !important; }
+  .filters.m-open .m-more { display: block !important; }
+  /* 체크 칸(MAS만 등)만 접고, 초기화·CSV·검색 버튼은 늘 보이게 */
+  .m-more-row:not(.m-open) > label, .m-more-row:not(.m-open) > .spacer { display: none; }
+  .m-more-row { justify-content: flex-end; }
+  .m-more-row .btn.primary { flex: 1; }
+  .m-more-btn { display: block; width: 100%; margin-top: 8px; padding: 7px; font-size: 13px; color: var(--muted); background: none; border-style: dashed; }
+
+  /* 표는 옆으로 밀어서 본다 (집계 표처럼 칸끼리 견주는 표). 목록(거래내역·등록품목)은 아래에서 카드로 바꾼다 */
+  .tablewrap { -webkit-overflow-scrolling: touch; }
+  table { font-size: 13px; }
+
+  /* ── 거래내역 목록: 납품요구 한 건 = 머리 줄 + 품목 카드 ── */
+  #oTable { min-width: 0 !important; table-layout: auto; width: 100%; }
+  #oTable colgroup, #oTable thead { display: none; }
+  #oTable, #oTable tbody, #oTable tr, #oTable td { display: block; }
+  #oTable tr.grp > td { padding: 9px 10px 7px; }
+  #oTable .grp-top { gap: 4px 8px; }
+  #oTable .grp-nm { flex-basis: 100%; order: -1; white-space: normal; overflow: visible; text-overflow: clip; max-width: none; }
+  #oTable tr.grp-item {
+    display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 2px 12px;
+    padding: 7px 10px; border-bottom: 1px solid var(--line-soft);
+  }
+  #oTable tr.grp-item > td { padding: 0 !important; border: 0; min-width: 0; text-align: left; }
+  #oTable tr.grp-item > td.spec { grid-column: 1 / -1; }
+  #oTable tr.grp-item > td:nth-child(4) { text-align: right; }
+  #oTable tr.grp-item > td:nth-child(2)::before { content: '단가 '; }
+  #oTable tr.grp-item > td:nth-child(3)::before { content: '수량 '; }
+  #oTable tr.grp-item > td:nth-child(n + 2):nth-child(-n + 3)::before { color: var(--muted); font-size: 12px; }
+  #oTable .it-corp { display: inline; min-width: 0; white-space: normal; font-weight: 600; }
+  #oTable .it-id { margin-right: 6px; }
+
+  /* ── 등록품목 목록: 품목 한 줄 = 카드 하나 ── */
+  #pTable { width: 100%; }
+  #pTable thead { display: none; }
+  #pTable, #pTable tbody, #pTable tr, #pTable td { display: block; }
+  #pTable tr.prod {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: start;
+    padding: 10px; border-bottom: 1px solid var(--line);
+  }
+  #pTable tr.prod > td { padding: 0; border: 0; }
+  #pTable tr.prod > td:nth-child(1) { grid-column: 1 / -1; }
+  #pTable tr.prod > td:nth-child(2) { grid-column: 1; }
+  #pTable tr.prod > td:nth-child(3) { grid-column: 2; grid-row: 2; text-align: right; }
+  #pTable tr.prod > td:nth-child(4) { grid-column: 1; }
+  #pTable tr.prod > td:nth-child(4) br, #pTable tr.prod > td:nth-child(4) > div { display: inline; margin-left: 4px; }
+  #pTable tr.prod > td:nth-child(5) { grid-column: 1; }
+  #pTable tr.prod > td:nth-child(6) { grid-column: 2; grid-row: 3 / span 2; align-self: end; justify-self: end; }
+
+  /* 설명 말풍선(ⓘ)이 화면 밖으로 나가지 않게 */
+  .info-pop { max-width: calc(100vw - 32px); }
+}
+
+
+@media (max-width: 760px) {
+  /* 업체 실적 표: 칸이 많아 줄이면 품목명이 한 글자씩 꺾인다 — 폭을 지키고 옆으로 밀어서 본다 */
+  #pfSummary { min-width: 660px; }
+  #pfSummary td:first-child { min-width: 140px; }
+  #pfSummary td:nth-child(2) { min-width: 120px; }
+}
+
+@media (max-width: 760px) {
+  /* 관심목록 표: 규격이 한 글자씩 꺾이지 않게 폭을 지키고 옆으로 밀어서 본다 */
+  #bTable { min-width: 640px; }
+  #bTable td.spec, #bTable td:nth-child(4) { min-width: 180px; }
+}
