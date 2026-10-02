@@ -83,7 +83,9 @@
       ${err ? `<div class="notice warn">${err}</div>` : ''}
       <input id="mLink" type="url" inputmode="url" placeholder="https://1drv.ms/f/…" autocomplete="off" />
       <button class="btn primary" id="mLinkGo">자료 받기 시작</button>
-      <p class="small muted">처음에 약 40MB 를 받습니다 (와이파이를 권합니다). 휴대폰 저장 공간은 약 250MB 를 씁니다.</p>`);
+      <p class="small muted">처음에 약 40MB 를 받습니다 (와이파이를 권합니다). 휴대폰 저장 공간은 약 250MB 를 씁니다.</p>
+      ${installed() ? '' : '<button class="btn" id="mInstallVeil">먼저 앱으로 설치하기 (홈 화면 아이콘)</button>'}`);
+    veil.querySelector('#mInstallVeil')?.addEventListener('click', () => installBtn.click());
     veil.querySelector('#mLinkGo').addEventListener('click', () => {
       const link = veil.querySelector('#mLink').value.trim();
       if (!/^https:\/\/(1drv\.ms|onedrive\.live\.com)\//.test(link) && !/^\/[\w/-]+\/$/.test(link)) return askLink('OneDrive 공유 링크(https://1drv.ms/… 또는 https://onedrive.live.com/…)를 넣어 주세요.');
@@ -178,6 +180,67 @@
     }
   }
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', compactFilters) : compactFilters();
+
+  /*
+   * 앱으로 설치 — 크롬이 이 사이트를 앱(아이콘·전체 화면)으로 설치한다. APK 와 달리 보안 경고가 없다.
+   * 크롬이 설치를 허락하면(beforeinstallprompt) 버튼 한 번으로 설치 창을 띄우고,
+   * 그 밖의 브라우저(아이폰 사파리·삼성 인터넷)나 아직 허락 전이면 메뉴에서 설치하는 방법을 보여 준다.
+   * 이미 앱으로 열었거나 안드로이드 앱(APK) 안이면 버튼을 숨긴다.
+   */
+  const installed = () =>
+    matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone || window.Capacitor;
+  let installEvt = null;
+  const installBtn = document.createElement('button');
+  installBtn.type = 'button';
+  installBtn.className = 'btn primary';
+  installBtn.id = 'mInstallBtn';
+  installBtn.textContent = '앱 설치';
+  installBtn.title = '홈 화면에 G2B Finder 아이콘을 만듭니다';
+  installBtn.hidden = true;
+  const placeInstall = () => {
+    document.querySelector('.headinfo')?.prepend(installBtn);
+    installBtn.hidden = Boolean(installed());
+  };
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', placeInstall) : placeInstall();
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); // 크롬이 아래에 띄우는 작은 안내 대신 버튼으로
+    installEvt = e;
+  });
+  window.addEventListener('appinstalled', () => {
+    installEvt = null;
+    installBtn.hidden = true;
+  });
+
+  function installGuide() {
+    const ua = navigator.userAgent;
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const samsung = /SamsungBrowser/.test(ua);
+    const steps = ios
+      ? '<b>사파리</b>로 이 주소를 열고, 아래쪽 <b>공유 버튼(□↑)</b> → <b>홈 화면에 추가</b> → <b>추가</b>를 누르세요.'
+      : samsung
+        ? '아래쪽 <b>메뉴(≡)</b> → <b>현재 페이지 추가</b> → <b>홈 화면</b>을 누르세요.<br><span class="small muted">크롬으로 열면 버튼 한 번으로 설치됩니다.</span>'
+        : '오른쪽 위 <b>메뉴(⋮)</b> → <b>앱 설치</b> (또는 <b>홈 화면에 추가 → 설치</b>)를 누르세요.<br><span class="small muted">메뉴에 안 보이면 잠시 뒤(첫 화면을 다 받은 뒤) 다시 해 보세요.</span>';
+    const box = document.createElement('div');
+    box.id = 'mInstall';
+    box.innerHTML = `<div class="m-box"><h2>앱으로 설치</h2>
+      <p>${steps}</p>
+      <p class="small muted">홈 화면·앱 목록에 G2B Finder 아이콘이 생기고, 주소창 없이 앱처럼 열립니다.
+      보안 경고나 "출처를 알 수 없는 앱" 허용이 필요 없습니다.</p>
+      <button class="btn" id="mInstallClose">닫기</button></div>`;
+    document.body.append(box);
+    box.querySelector('#mInstallClose').addEventListener('click', () => box.remove());
+    box.addEventListener('click', (e) => e.target === box && box.remove());
+  }
+
+  installBtn.addEventListener('click', async () => {
+    if (!installEvt) return installGuide();
+    const e = installEvt;
+    installEvt = null; // 설치 창은 한 번만 띄울 수 있다
+    e.prompt();
+    const r = await e.userChoice.catch(() => null);
+    if (r?.outcome === 'accepted') installBtn.hidden = true;
+  });
 
   // 저장 공간을 브라우저가 마음대로 비우지 않게 (받은 자료 250MB)
   navigator.storage?.persist?.().catch(() => {});

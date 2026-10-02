@@ -14,6 +14,22 @@
   padding: 16px;
 }
 #mVeil[hidden] { display: none; }
+/* 앱 설치 안내 — 같은 상자를 화면 위에 띄운다 */
+#mInstall {
+  position: fixed; inset: 0; z-index: 1001;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+#mInstall .m-box {
+  width: 100%; max-width: 440px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 20px 18px;
+}
+#mInstall h2 { margin: 0 0 12px; font-size: 18px; }
+#mInstall p { line-height: 1.6; }
+#mInstall .btn { width: 100%; padding: 11px; font-size: 15px; margin-top: 6px; }
+#mInstallBtn[hidden] { display: none; }
 #mVeil .m-box {
   width: 100%; max-width: 440px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
