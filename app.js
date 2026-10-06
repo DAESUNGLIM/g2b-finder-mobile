@@ -2017,7 +2017,7 @@ const PERF_MAX = 8;
 const PERF_CORPS_MAX = 10;
 // corps: 사용자가 추가한 업체, view: 지금 비교 중인 업체 (추가한 업체 또는 조건에 맞는 상위 업체)
 /** dtils: 기간별 실적에서 체크한 품목 (체크한 순서 = 색 순서) */
-const perf = { corps: [], view: [], years: new Set(), market: null, dtils: [] };
+const perf = { corps: [], view: [], years: new Set(), market: null, dtils: [], scope: 'cond', scopeAll: false };
 /** 기간별 실적에서 한 번에 따로 그릴 수 있는 품목 수 (색 8개) */
 const PF_DTIL_MAX = 8;
 
@@ -2504,7 +2504,17 @@ function initPerfSort() {
   try {
     const v = localStorage.getItem('perfSort');
     if (v && PF_SORTS[v]) $('#pfSort').value = v;
+    perf.scope = localStorage.getItem('perfScope') === 'all' ? 'all' : 'cond';
   } catch {}
+  $('#pfScope').value = perf.scope;
+  // 품목 범위 — 업체는 조건으로 고른 그대로, 실적만 검색한 세부품명 / 그 업체들의 모든 세부품명
+  $('#pfScope').addEventListener('change', () => {
+    perf.scope = $('#pfScope').value === 'all' ? 'all' : 'cond';
+    try {
+      localStorage.setItem('perfScope', perf.scope);
+    } catch {}
+    loadPerf('auto');
+  });
   $('#pfSort').addEventListener('change', () => {
     try {
       localStorage.setItem('perfSort', $('#pfSort').value);
@@ -2513,13 +2523,15 @@ function initPerfSort() {
   });
 }
 
-function renderPerfSummary(byBiz, itemRows, total, listing, locs = {}) {
-  perf.summary = [byBiz, itemRows, total, listing, locs];
+function renderPerfSummary(byBiz, itemRows, total, listing, locs = {}, condDtils = null) {
+  perf.summary = [byBiz, itemRows, total, listing, locs, condDtils];
   // 업체를 직접 추가했을 때만 '추가한 순서' 가 뜻이 있다 (조건만으로 고른 상위 업체는 원래 금액 순)
   const manual = perf.view === perf.corps;
   $('#pfSort option[value=added]').hidden = !manual;
   if (!manual && $('#pfSort').value === 'added') $('#pfSort').value = 'amt';
-  $('#pfSortRow').hidden = perf.view.length < 2;
+  $('#pfSortBox').hidden = perf.view.length < 2;
+  $('#pfScopeBox').hidden = !perfCond().fDtil;
+  $('#pfSortRow').hidden = $('#pfSortBox').hidden && $('#pfScopeBox').hidden;
   const order = PF_SORTS[$('#pfSort').value] || PF_SORTS.amt;
   const view = perf.view
     .map((c) => ({ c, s: byBiz.get(c.bizno) || {} }))
@@ -2547,20 +2559,25 @@ function renderPerfSummary(byBiz, itemRows, total, listing, locs = {}) {
   // 조건이 있으면 조건 전체 금액 대비 점유율도 보여준다
   const share = (amt) =>
     perf.market?.amt ? ` <span class="muted small">점유율 ${((amt / perf.market.amt) * 100).toFixed(1)}%</span>` : '';
+  // 전체 품목으로 볼 때 — 검색한 세부품명 줄에 ★ 와 점유율을 달고 맨 위로 (업체 합계는 조건 밖 품목까지라 점유율을 달지 않는다)
+  const hit = new Set(perf.scopeAll ? condDtils || [] : []);
+  const itemName = (r) => (hit.has(r.bucket) ? `<span class="pf-star" title="검색한 세부품명">★</span> ${esc(r.bucket)}` : esc(r.bucket || '(없음)'));
+  const hitShare = (r) => (hit.has(r.bucket) ? share(r.amt) : '');
+  const totalShare = (amt) => (perf.scopeAll ? '' : share(amt));
   const bodies = view.map((c) => {
     const s = byBiz.get(c.bizno) || {};
-    const items = itemRows.filter((r) => r.bizno === c.bizno).sort((a, b) => b.amt - a.amt);
+    const items = itemRows.filter((r) => r.bizno === c.bizno).sort((a, b) => hit.has(b.bucket) - hit.has(a.bucket) || b.amt - a.amt);
     const loc = locs[c.bizno] || c.loc;
     // 품목이 하나뿐이면 소계가 그 품목 줄과 같으니, 소계 자리에 품목 이름을 쓰고 품목 줄은 없앤다
     const single = items.length === 1;
     let html = `<tr class="pf-sub"><td>${swatch(c.slot)}<b>${esc(c.name)}</b>${
       loc ? ` <span class="pf-loc small" title="업체소재지">${esc(loc)}</span>` : ''
     }<div class="muted small">${esc(c.bizno)}${listLine(c.bizno)}</div></td>
-      <td>${single ? esc(items[0].bucket || '(없음)') : `<b>소계</b> <span class="muted small">${n(items.length)}개 품목</span>`}${share(s.amt || 0)}</td>${cells(s, true)}</tr>`;
+      <td>${single ? itemName(items[0]) + hitShare(items[0]) : `<b>소계</b> <span class="muted small">${n(items.length)}개 품목</span>`}${totalShare(s.amt || 0)}</td>${cells(s, true)}</tr>`;
     if (!single) items.forEach((r, i) => {
       const more = items.length > PF_ITEMS_SHOWN + 1 && i >= PF_ITEMS_SHOWN;
-      const pct = s.amt ? ` <span class="muted small">${((r.amt / s.amt) * 100).toFixed(1)}%</span>` : '';
-      html += `<tr class="pf-item${more ? ' pf-more' : ''}"><td></td><td>${esc(r.bucket || '(없음)')}${pct}</td>${cells(r, false)}</tr>`;
+      const pct = s.amt ? ` <span class="muted small" title="이 업체 납품 금액 가운데 비중">${((r.amt / s.amt) * 100).toFixed(1)}%</span>` : '';
+      html += `<tr class="pf-item${more ? ' pf-more' : ''}"><td></td><td>${itemName(r)}${pct}${hitShare(r)}</td>${cells(r, false)}</tr>`;
     });
     if (items.length > PF_ITEMS_SHOWN + 1) {
       const rest = items.slice(PF_ITEMS_SHOWN);
@@ -2574,7 +2591,7 @@ function renderPerfSummary(byBiz, itemRows, total, listing, locs = {}) {
 
   const foot =
     perf.view.length > 1 && total
-      ? `<tfoot><tr><td>전체 합계</td><td>업체 ${n(perf.view.length)}곳${share(total.amt)}</td>${cells(total, true)}</tr></tfoot>`
+      ? `<tfoot><tr><td>전체 합계</td><td>업체 ${n(perf.view.length)}곳${totalShare(total.amt)}</td>${cells(total, true)}</tr></tfoot>`
       : '';
   const table = $('#pfSummary');
   const open = new Set($$('tbody.open', table).map((t) => t.dataset.biz));
@@ -2815,6 +2832,7 @@ async function loadPerf(fillMode = 'ask') {
 
   // 비교할 업체: 추가한 업체가 있으면 그 업체들, 없고 조건만 있으면 조건에 맞는 상위 업체.
   perf.market = null;
+  perf.scopeAll = perf.scope === 'all' && Boolean(cond.fDtil);
   if (hasCond) {
     const top = await api('/perf/top?' + qs({ ...period0, limit: perf.corps.length ? 1 : $('#pfTopN').value }));
     perf.market = top.market;
@@ -2842,7 +2860,8 @@ async function loadPerf(fillMode = 'ask') {
 
   // 조건만으로 고른 상위 업체는 서버가 같은 순서로 다시 고른다 (전체면 수백 곳이라 주소에 다 싣지 않는다)
   const auto = perf.view.some((c) => c.auto);
-  const base = auto ? { ...period0, top: $('#pfTopN').value } : { ...period0, biznos: perf.view.map((c) => c.bizno).join(',') };
+  const scope = perf.scopeAll ? { scope: 'all' } : {};
+  const base = auto ? { ...period0, ...scope, top: $('#pfTopN').value } : { ...period0, ...scope, biznos: perf.view.map((c) => c.bizno).join(',') };
   const by = $('#pfPeriod').value;
   const fetchPicked = () => {
     const picked = perf.dtils.length ? { dtils: JSON.stringify(perf.dtils) } : {};
@@ -2870,7 +2889,7 @@ async function loadPerf(fillMode = 'ask') {
   for (const c of perf.view) if (byBiz.get(c.bizno)?.name) c.name = byBiz.get(c.bizno).name;
   if (perf.view === perf.corps) savePerfCorps();
   renderPerfChips();
-  renderPerfSummary(byBiz, dtil.rows, period.total, dtil.listing, dtil.locs);
+  renderPerfSummary(byBiz, dtil.rows, period.total, dtil.listing, dtil.locs, dtil.condDtils);
 
   perf.last = { period, by, dtils: [...perf.dtils] };
   renderPeriod(true);
@@ -2937,31 +2956,53 @@ async function bindMarks(scope) {
  * 한도를 넘거나 'ask' 면 버튼으로 묻는다.
  * 세부품명으로 좁혀 받으므로 그 품목의 다른 업체 거래도 같이 저장된다 (경쟁 비교에도 쓰임).
  */
-async function ensurePerfCoverage(mode) {
+async function ensurePerfCoverage(mode, lead = '') {
   if (perf.filling) return;
-  if (!perf.corps.length) return fillBanner('', '');
+  // 채울 업체: 추가한 업체. 없으면 '전체 품목' 으로 볼 때 조건으로 고른 업체 (금액 큰 순으로 PERF_CORPS_MAX 곳까지)
+  const picked = perf.corps.length ? perf.corps : perf.scopeAll ? perf.view.slice(0, PERF_CORPS_MAX) : [];
+  if (!picked.length) return fillBanner('', '');
+  const who = perf.corps.length ? '추가한 업체' : perf.view.length > picked.length ? `상위 ${n(picked.length)}곳` : '보이는 업체';
+  const whoGa = who + (who.endsWith('곳') ? '이' : '가');
+  // 조건으로 고른 업체는 여러 곳이라 저절로 받지 않고 예상 호출 수를 보여 준 뒤 묻는다
+  if (!perf.corps.length && mode === 'auto') mode = 'ask';
+  const banner = (kind, html) => fillBanner(kind, (lead ? lead + '<br>' : '') + html);
   const from = dateVal('#mFrom').replace(/-/g, '');
   const to = dateVal('#mTo').replace(/-/g, '');
   if (from.length !== 8 || to.length !== 8) return;
   let plan;
   try {
-    plan = await api('/perf/fillplan?' + qs({ biznos: perf.corps.map((c) => c.bizno).join(','), from, to, years: [...perf.years].join(',') }));
+    plan = await api(
+      '/perf/fillplan?' +
+        qs({
+          biznos: picked.map((c) => c.bizno).join(','),
+          corps: perf.scopeAll ? JSON.stringify(picked.map(({ bizno, name }) => ({ bizno, name }))) : '',
+          from,
+          to,
+          years: [...perf.years].join(','),
+        })
+    );
   } catch {
     return; // 확인이 실패해도 실적은 이미 나와 있다
   }
   if (perf.filling) return;
   const names = (xs) => xs.slice(0, 6).map(esc).join(' · ') + (xs.length > 6 ? ` 외 ${n(xs.length - 6)}개` : '');
+
+  // 전체 품목 — 업체 단위로 등록품목을 받아 본 적 없는 업체는, 등록했지만 거래내역을 안 받은 세부품명이 더 있을 수 있다
+  const unknown = plan.unknown || [];
+  const skipKey = unknown.map((c) => c.bizno).join(',');
+  if (perf.scopeAll && unknown.length && perf.skipUnknown !== skipKey) return askCorpListings(unknown, who, names, mode, skipKey);
+
   if (!plan.dtils.length) {
-    return fillBanner(
+    return banner(
       '',
-      `<span class="small">추가한 업체의 저장된 등록품목이 이 기간에 없어 거래내역을 채울 세부품명이 없습니다.` +
+      `<span class="small">${who}의 저장된 등록품목이 이 기간에 없어 거래내역을 채울 세부품명이 없습니다.` +
         ` 업체 추가 칸에 이름을 넣고 <b>조달청에서 가져오기</b>로 등록품목을 받으면 그 세부품명의 거래내역을 채웁니다.</span>`
     );
   }
   const jobs = plan.jobs;
   const all = plan.dtils.map((d) => d.dtil);
   if (!jobs.length) {
-    return fillBanner('', `<span class="small">추가한 업체가 등록한 세부품명 ${n(all.length)}개(${names(all)})의 거래내역을 이 기간 모두 받아 두었습니다 · API 호출 0회</span>`);
+    return banner('', `<span class="small">${whoGa} 등록한 세부품명 ${n(all.length)}개(${names(all)})의 거래내역을 이 기간 모두 받아 두었습니다 · API 호출 0회</span>`);
   }
   const todo = [...new Set(jobs.map((j) => j.dtil))];
   const days = new Map();
@@ -2970,11 +3011,11 @@ async function ensurePerfCoverage(mode) {
   const est = jobs.reduce((t, j) => t + (j.estCalls || 0), 0);
   const estText = state.mobile ? '' : plan.mock ? '샘플 모드라 API 호출 없음' : `예상 API 약 ${n(est)}회 · 오늘 남은 ${n(plan.remainingCalls)}회`;
   const what =
-    `추가한 업체가 등록한 세부품명 <b>${n(todo.length)}개</b>의 거래내역 가운데 이 기간에 아직 받지 않은 날짜가 있습니다${estText ? ` <span class="small muted">(${estText})</span>` : ''}` +
+    `${whoGa} 등록한 세부품명 <b>${n(todo.length)}개</b>의 거래내역 가운데 이 기간에 아직 받지 않은 날짜가 있습니다${estText ? ` <span class="small muted">(${estText})</span>` : ''}` +
     `<br><span class="small">${detail}</span>`;
 
   if (state.viewer) {
-    fillBanner(
+    banner(
       'warn',
       `${what}<br><span class="small">검색 전용 프로그램이라 직접 받을 수 없습니다. 관리자 PC 에 요청하면 대신 받아서 몇 분 뒤 여기에도 들어옵니다.</span>` +
         ` <button class="btn primary" id="pfReqSend">관리자에게 요청 보내기 (세부품명 ${n(todo.length)}개)</button>`
@@ -3011,7 +3052,7 @@ async function ensurePerfCoverage(mode) {
   }
 
   if (plan.collecting) {
-    return fillBanner('warn', `${what}<br><span class="small">다른 수집이 진행 중입니다. 끝난 뒤 <b>집계</b>를 누르면 채웁니다.</span>`);
+    return banner('warn', `${what}<br><span class="small">다른 수집이 진행 중입니다. 끝난 뒤 <b>집계</b>를 누르면 채웁니다.</span>`);
   }
   const s = state.settings;
   const overQuota = !plan.mock && est > plan.remainingCalls;
@@ -3066,8 +3107,82 @@ async function ensurePerfCoverage(mode) {
 
   if (mode === 'auto' && s.autoFill && !overQuota) return doFill();
   const why = mode !== 'auto' ? '' : !s.autoFill ? '자동 받기가 꺼져 있습니다.' : '예상 호출 수가 오늘 남은 한도보다 많습니다.';
-  fillBanner('warn', `${what}<br><span class="small">${why}</span> <button class="btn primary" id="pfFillGo">빠진 날짜만 받기 (약 ${n(est)}회)</button>`);
+  banner('warn', `${what}<br><span class="small">${why}</span> <button class="btn primary" id="pfFillGo">빠진 날짜만 받기 (약 ${n(est)}회)</button>`);
   $('#pfFillGo').addEventListener('click', doFill);
+}
+
+/**
+ * 전체 품목 — 등록품목을 업체 단위로 받아 본 적 없는 업체를 알리고, 조달청에서 업체명으로 받는다 (업체당 API 10~20회).
+ * 받은 뒤 ensurePerfCoverage 가 그 업체들이 등록한 세부품명 가운데 거래내역이 빠진 날짜를 보여 주고 묻는다.
+ * 검색 전용·모바일은 관리자 PC 에 업체 가져오기를 요청한다 (관리자 PC 가 등록품목과 올해 거래내역을 받는다).
+ */
+function askCorpListings(unknown, who, names, mode, skipKey) {
+  const list = names(unknown.map((c) => c.name));
+  const what =
+    `${who} 가운데 <b>${n(unknown.length)}곳</b>은 조달청에서 등록품목을 아직 받지 않아, 등록했지만 거래내역을 받지 않은 세부품명이 더 있을 수 있습니다.` +
+    `<br><span class="small">${list}</span>`;
+  const skip = '<button class="btn" id="pfCorpSkip">건너뛰고 받아 둔 것만 보기</button>';
+  if (state.viewer) {
+    fillBanner('warn', `${what}<br><button class="btn primary" id="pfCorpAsk">관리자에게 등록품목 요청 (${n(unknown.length)}곳)</button> ${skip}`);
+  } else {
+    fillBanner(
+      'warn',
+      `${what}<br><button class="btn primary" id="pfCorpGo">등록품목 받기 (${n(unknown.length)}곳 · 약 ${n(unknown.length * 10)}~${n(unknown.length * 20)}회)</button> ${skip}`
+    );
+  }
+  $('#pfCorpSkip').addEventListener('click', () => {
+    perf.skipUnknown = skipKey;
+    ensurePerfCoverage(mode);
+  });
+
+  $('#pfCorpAsk')?.addEventListener('click', async () => {
+    const b = $('#pfCorpAsk');
+    b.disabled = true;
+    b.textContent = '보내는 중…';
+    const got = { sent: 0, dup: 0, fail: 0 };
+    let why = '';
+    for (const c of unknown) {
+      try {
+        const r = await api('/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset: 'corp', corp: c.name }) });
+        if (r.state === 'sent' || r.state === 'dup' || r.state === 'queued') got[r.state === 'dup' ? 'dup' : 'sent']++;
+        else (got.fail++, (why = r.error || why));
+      } catch (err) {
+        got.fail++;
+        why = err.message;
+      }
+    }
+    perf.skipUnknown = skipKey; // 받아 올 때까지는 받아 둔 것으로 본다
+    const note = got.fail
+      ? `요청 ${n(got.sent + got.dup)}곳은 보냈지만 ${n(got.fail)}곳은 보내지 못했습니다${why ? ` — ${esc(why)}` : ''}.`
+      : `등록품목 요청을 보냈습니다${got.dup ? ` (이미 요청한 ${n(got.dup)}곳 포함)` : ''}. 관리자 PC 가 받으면 몇 분 뒤 이 화면에도 들어옵니다.`;
+    ensurePerfCoverage(mode, `<span class="small">${note}</span>`);
+  });
+
+  $('#pfCorpGo')?.addEventListener('click', async () => {
+    perf.filling = true;
+    let calls = 0;
+    const fails = [];
+    try {
+      for (const [i, c] of unknown.entries()) {
+        fillBanner('', `조달청에서 등록품목 받는 중 ${i + 1}/${unknown.length} · <b>${esc(c.name)}</b>… (업체마다 30초 안팎)`);
+        try {
+          const r = await api('/corpfetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ term: c.name }) });
+          if (!r.cached) calls += r.calls || 0;
+        } catch (err) {
+          fails.push(`${esc(c.name)}: ${esc(err.message)}`);
+        }
+      }
+    } finally {
+      perf.filling = false;
+    }
+    perf.skipUnknown = skipKey; // 이름으로 못 찾은 업체를 다시 묻지 않게
+    refreshMeta();
+    await loadPerf(null);
+    const note =
+      `등록품목을 받았습니다 (${n(unknown.length - fails.length)}곳 · API ${n(calls)}회)` +
+      (fails.length ? ` · 못 받은 업체 ${n(fails.length)}곳 — ${fails.slice(0, 3).join(' / ')}` : '');
+    ensurePerfCoverage('ask', `<span class="small">${note}</span>`);
+  });
 }
 
 /* ── 관심목록 (세부품명 칩 + 묶음 표, 체크해서 물품비교로) ─────────── */

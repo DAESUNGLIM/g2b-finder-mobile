@@ -330,13 +330,22 @@
     <div id="pfFetchResult"></div>
     <div class="chips" id="pfChips" style="margin-top: 10px"></div>
     <div class="row pf-sort" id="pfSortRow" hidden>
-      <label class="small muted" for="pfSort">정렬</label>
-      <select id="pfSort">
-        <option value="amt">납품 금액 많은 순</option>
-        <option value="last">최근 거래 순</option>
-        <option value="name">업체명 순</option>
-        <option value="added">추가한 순서</option>
-      </select>
+      <span class="pf-sort-box" id="pfScopeBox" hidden>
+        <label class="small muted" for="pfScope">품목</label>
+        <select id="pfScope" title="업체는 세부품명 조건으로 고르고, 실적은 그 세부품명만 볼지 그 업체들이 판 모든 세부품명으로 볼지 고릅니다. 전체 품목에서 ★ 는 검색한 세부품명입니다.">
+          <option value="cond">검색한 세부품명만</option>
+          <option value="all">이 업체들의 전체 품목</option>
+        </select>
+      </span>
+      <span class="pf-sort-box" id="pfSortBox">
+        <label class="small muted" for="pfSort">정렬</label>
+        <select id="pfSort">
+          <option value="amt">납품 금액 많은 순</option>
+          <option value="last">최근 거래 순</option>
+          <option value="name">업체명 순</option>
+          <option value="added">추가한 순서</option>
+        </select>
+      </span>
     </div>
     <div class="tablewrap" style="margin-top: 12px"><table id="pfSummary"></table></div>
   </div>

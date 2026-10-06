@@ -526,6 +526,38 @@ export function corpDtils(biznos, from, to) {
     .all(...biznos, from, to);
 }
 
+/**
+ * 쇼핑몰 등록품목을 조달청에서 업체 단위로 받아 본 적이 없는 업체 (corp_fetch — 업체 실적 탭의 "조달청에서 가져오기").
+ * 받은 결과에 그 사업자번호가 있거나, 그 업체명으로 찾아 본 적이 있으면(못 찾았어도) 받은 것으로 친다.
+ * 받지 않은 업체는 저장된 등록품목이 세부품명 단위로 받은 일부뿐이라, 등록한 세부품명을 다 안다고 할 수 없다.
+ * @param {{bizno: string, name: string}[] | string} corps  (주소로 받을 때는 JSON)
+ */
+export function corpsNotFetched(corps) {
+  if (typeof corps === 'string') {
+    try {
+      corps = JSON.parse(corps);
+    } catch {
+      corps = [];
+    }
+  }
+  corps = (Array.isArray(corps) ? corps : []).slice(0, 50).map((c) => ({ bizno: String(c?.bizno || '').replace(/[^0-9]/g, ''), name: String(c?.name || '') }));
+  if (!corps.length) return [];
+  let saved = [];
+  try {
+    saved = db.prepare('SELECT term, result FROM corp_fetch').all();
+  } catch {
+    return corps; // 표가 아직 없다 (한 번도 받지 않음)
+  }
+  const terms = new Set(saved.map((r) => r.term));
+  const biznos = new Set();
+  for (const r of saved) {
+    try {
+      for (const c of JSON.parse(r.result).corps || []) biznos.add(String(c.bizno));
+    } catch {}
+  }
+  return corps.filter((c) => !biznos.has(c.bizno) && !terms.has(String(c.name || '').replace(/\s+/g, '')));
+}
+
 /** '202601'~'202609' → 그 사이 모든 달 (연도는 '2024'~'2026', 분기는 '2025Q3'~'2026Q2') */
 function fillPeriods(by, first, last) {
   const out = [];
@@ -693,6 +725,9 @@ export function performance(q = {}) {
   const allTop = q.top !== undefined && String(q.top) === '0';
   const by = PERF_GROUPS[q.by] ? q.by : 'month';
   if (!biznos.length) return { by, buckets: [], rows: [], corps: [], total: null };
+  // scope=all — 업체는 세부품명 조건으로 고르되, 실적은 그 업체들의 모든 세부품명으로 (세부품명 조건만 뺀다)
+  const scopeAll = q.scope === 'all' && String(q.fDtil || '').trim() !== '';
+  const sq = scopeAll ? { ...q, fDtil: '' } : q;
 
   const years = perfYears(q);
   // 여러 품목: dtils = JSON 배열 (품목 이름에 쉼표가 들어갈 수 있어서)
@@ -703,9 +738,10 @@ export function performance(q = {}) {
   dtils = (Array.isArray(dtils) ? dtils : []).map(String).slice(0, 50);
   if (!dtils.length && q.dtil) dtils = [String(q.dtil)];
   const cond = (withDtil) => {
-    const c = perfWhere(q, years);
+    const c = perfWhere(sq, years);
     // 사업자번호는 숫자만 저장돼 있어 색인을 타도록 그대로 비교한다.
-    if (allTop) c.add("corp_bizno <> ''"); // 전부면 조건이 곧 업체 목록이다 — 수천 개 IN 대신
+    if (allTop && !scopeAll) c.add("corp_bizno <> ''"); // 전부면 조건이 곧 업체 목록이다 — 수천 개 IN 대신
+    else if (allTop) c.add('corp_bizno IN (SELECT value FROM json_each(?))', JSON.stringify(biznos)); // 수백 곳이라 값 하나로
     else c.add(`corp_bizno IN (${biznos.map(() => '?').join(',')})`, ...biznos);
     if (withDtil && dtils.length) c.add(`dtil_clsfc_nm IN (${dtils.map(() => '?').join(',')})`, ...dtils);
     return c;
@@ -765,10 +801,19 @@ export function performance(q = {}) {
     )
     .all(...w.args);
   const keep = new Set(buckets);
-  const listing = q.listing ? listingOf(q, allTop ? null : biznos) : undefined;
+  const listing = q.listing ? listingOf(sq, allTop && !scopeAll ? null : biznos) : undefined;
+  // 전체 품목으로 볼 때, 검색한 세부품명 조건에 드는 품목 (표에서 ★ 로 표시)
+  let condDtils;
+  if (scopeAll && by === 'dtil' && buckets.length) {
+    const cw = dtilWhere(where(), q.fDtil);
+    condDtils = db
+      .prepare(`SELECT dtil_clsfc_nm d FROM (SELECT value dtil_clsfc_nm FROM json_each(?)) ${cw.clause()}`)
+      .all(JSON.stringify(buckets.filter(Boolean)), ...cw.args)
+      .map((r) => r.d);
+  }
   // 업체소재지 (거래내역에는 없어 corp_info 에서) — 품목 목록을 같이 달라는 호출에만 싣는다
   const locs = q.listing ? corpLocs(allTop ? corps.map((c) => c.bizno) : biznos) : undefined;
-  return { by, buckets, rows: rows.filter((r) => keep.has(r.bucket ?? '')), corps, total, listing, locs };
+  return { by, buckets, rows: rows.filter((r) => keep.has(r.bucket ?? '')), corps, total, listing, locs, condDtils };
 }
 
 export function overview() {

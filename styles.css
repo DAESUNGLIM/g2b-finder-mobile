@@ -440,6 +440,10 @@ body.viewer .admin-only { display: none !important; }
 .pf-sort { justify-content: flex-end; align-items: center; gap: 6px; margin-top: 10px; }
 .pf-sort[hidden] { display: none; }
 .pf-sort select { width: auto; }
+.pf-sort-box { display: inline-flex; align-items: center; gap: 6px; }
+.pf-sort-box[hidden] { display: none; }
+.pf-sort-box + .pf-sort-box { margin-left: 10px; }
+#pfSummary .pf-star { color: var(--brand); }
 #pfSummary tr.pf-item td:nth-child(2) { padding-left: 22px; }
 #pfSummary tbody:not(.open) tr.pf-more { display: none; }
 #pfSummary tr.pf-toggle td { cursor: pointer; color: var(--brand); font-size: 12px; }

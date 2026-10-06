@@ -209,6 +209,7 @@ const PK = {
   product: ['dataset', 'cntrct_no', 'cntrct_sno', 'prdct_idnt_no'],
   coverage: ['dataset', 'filter_key', 'day'],
   corp_api: ['bizno'],
+  corp_fetch: ['term'], // 업체 단위로 등록품목을 받아 본 업체 (업체 실적 "전체 품목" 의 빠진 자료 확인)
   clsfc: ['kind', 'code'],
 };
 
@@ -475,7 +476,7 @@ async function route(method, url, body) {
         jobs.push({ dtil: d.dtil, from: m.days[0], to: m.days.at(-1), missingDays: m.days.length, estCalls: 0, filters, chunkDays: 31 });
       }
     }
-    return { dtils, jobs, remainingCalls: 0, mock: false, collecting: false };
+    return { dtils, jobs, unknown: store.corpsNotFetched(q.corps), remainingCalls: 0, mock: false, collecting: false };
   }
   if (path === '/perf' && method === 'GET') return store.performance(q);
   if (path === '/perf/years' && method === 'GET') return store.orderYears();
