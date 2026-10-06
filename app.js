@@ -2551,11 +2551,13 @@ function renderPerfSummary(byBiz, itemRows, total, listing, locs = {}) {
     const s = byBiz.get(c.bizno) || {};
     const items = itemRows.filter((r) => r.bizno === c.bizno).sort((a, b) => b.amt - a.amt);
     const loc = locs[c.bizno] || c.loc;
+    // 품목이 하나뿐이면 소계가 그 품목 줄과 같으니, 소계 자리에 품목 이름을 쓰고 품목 줄은 없앤다
+    const single = items.length === 1;
     let html = `<tr class="pf-sub"><td>${swatch(c.slot)}<b>${esc(c.name)}</b>${
       loc ? ` <span class="pf-loc small" title="업체소재지">${esc(loc)}</span>` : ''
     }<div class="muted small">${esc(c.bizno)}${listLine(c.bizno)}</div></td>
-      <td><b>소계</b> <span class="muted small">${n(items.length)}개 품목</span>${share(s.amt || 0)}</td>${cells(s, true)}</tr>`;
-    items.forEach((r, i) => {
+      <td>${single ? esc(items[0].bucket || '(없음)') : `<b>소계</b> <span class="muted small">${n(items.length)}개 품목</span>`}${share(s.amt || 0)}</td>${cells(s, true)}</tr>`;
+    if (!single) items.forEach((r, i) => {
       const more = items.length > PF_ITEMS_SHOWN + 1 && i >= PF_ITEMS_SHOWN;
       const pct = s.amt ? ` <span class="muted small">${((r.amt / s.amt) * 100).toFixed(1)}%</span>` : '';
       html += `<tr class="pf-item${more ? ' pf-more' : ''}"><td></td><td>${esc(r.bucket || '(없음)')}${pct}</td>${cells(r, false)}</tr>`;
