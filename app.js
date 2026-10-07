@@ -1228,7 +1228,18 @@ function renderImport(list) {
     (r) =>
       r.error
         ? `<tr><td class="small">${esc(r.file)}</td><td colspan="7" class="muted">실패: ${esc(r.error)}</td></tr>`
-        : `<tr>
+        : r.kind === 'product'
+          ? `<tr>
+      <td class="small">${esc(r.file)}<div class="muted">쇼핑몰 등록품목 · ${esc(r.corps.slice(0, 3).join(', '))}${r.corps.length > 3 ? ` 외 ${n(r.corps.length - 3)}곳` : ''}</div></td>
+      <td class="small">${esc(Object.entries(r.dtils || {}).map(([k, v]) => `${k} ${n(v)}`).join(', '))}</td>
+      <td class="nowrap small">${r.minDate ? `등록 ${ymd(r.minDate)} ~ ${ymd(r.maxDate)}` : '-'}</td>
+      <td class="num">${n(r.total)}${r.bad ? ` <span class="muted small">(건너뜀 ${n(r.bad)})</span>` : ''}</td>
+      <td class="num">${n(r.inserted)}</td>
+      <td class="num">${n(r.updated)}</td>
+      <td class="num">${n(r.keptApi)}</td>
+      <td class="small">${r.corpMarked ? '업체 전체 등록품목으로 기록 (업체 실적 "전체 품목" 이 다시 받자고 묻지 않음)' : '<span class="muted">-</span>'}</td>
+    </tr>`
+          : `<tr>
       <td class="small">${esc(r.file)}</td>
       <td class="small">${esc(Object.entries(r.dtils || {}).map(([k, v]) => `${k} ${n(v)}`).join(', '))}</td>
       <td class="nowrap small">${ymd(r.minDate)} ~ ${ymd(r.maxDate)}</td>
