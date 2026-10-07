@@ -1146,14 +1146,14 @@ async function importFiles(all) {
       label: f.webkitRelativePath || f.name,
       size: f.size,
       send: async () => {
-        // 먼저 브라우저에서 읽어 본다. 못 읽으면 서버에 가기 전에 이유를 알려 준다.
-        let body;
+        // 먼저 앞부분만 읽어 본다. 못 읽으면 서버에 가기 전에 이유를 알려 준다.
+        // 파일은 통째로 메모리에 올리지 않고 그대로 보낸다 (수백 MB 파일도 되게)
         try {
-          body = await f.arrayBuffer();
+          await f.slice(0, 16).arrayBuffer();
         } catch {
           throw new Error('브라우저가 이 파일을 읽지 못했습니다 (OneDrive 클라우드 파일이거나 선택 뒤 바뀐 파일). 아래 "경로에서 가져오기" 를 써 주세요.');
         }
-        return api('/import?' + qs({ name: f.webkitRelativePath || f.name, cover }), { method: 'POST', body });
+        return api('/import?' + qs({ name: f.webkitRelativePath || f.name, cover }), { method: 'POST', body: f });
       },
     }))
   );
@@ -1202,12 +1202,20 @@ async function runImport(files) {
   buttons.forEach((id) => ($(id).disabled = true));
   try {
     for (const [i, f] of files.entries()) {
-      notice('#impProgress', '', `가져오는 중 ${i + 1} / ${files.length} — <b>${esc(f.label)}</b> (${n(Math.round(f.size / 1024))}KB)`);
+      const what = `가져오는 중 ${i + 1} / ${files.length} — <b>${esc(f.label)}</b> (${f.size >= 1048576 ? n(Math.round(f.size / 1048576)) + 'MB' : n(Math.round(f.size / 1024)) + 'KB'})`;
+      notice('#impProgress', '', what);
+      // 큰 파일은 몇 분 걸린다 — 서버가 지금까지 넣은 줄 수를 보여 준다
+      const poll = setInterval(async () => {
+        const s = await api('/import/status').catch(() => null);
+        if (s?.rows) notice('#impProgress', '', `${what} · ${n(s.rows)}줄 넣음 (${n(Math.round((Date.now() - s.startedAt) / 1000))}초)`);
+      }, 2000);
       try {
         const r = await f.send();
         done.push({ ...r, file: f.label });
       } catch (err) {
         done.push({ file: f.label, error: err.message === 'Failed to fetch' ? '앱 서버에 연결하지 못했습니다 (서버 창이 닫혔는지 확인).' : err.message });
+      } finally {
+        clearInterval(poll);
       }
       renderImport(done);
     }
@@ -1244,14 +1252,22 @@ function renderImport(list) {
         ? `<tr><td class="small">${esc(r.file)}</td><td colspan="7" class="muted">실패: ${esc(r.error)}</td></tr>`
         : r.kind === 'product'
           ? `<tr>
-      <td class="small">${esc(r.file)}<div class="muted">쇼핑몰 등록품목 · ${esc(r.corps.slice(0, 3).join(', '))}${r.corps.length > 3 ? ` 외 ${n(r.corps.length - 3)}곳` : ''}</div></td>
-      <td class="small">${esc(Object.entries(r.dtils || {}).map(([k, v]) => `${k} ${n(v)}`).join(', '))}</td>
+      <td class="small">${esc(r.file)}<div class="muted">쇼핑몰 등록품목 · ${esc(r.corpNames.join(', '))}${r.corpCount > r.corpNames.length ? ` 외 ${n(r.corpCount - r.corpNames.length)}곳` : ''}</div></td>
+      <td class="small">${esc(Object.entries(r.dtils || {}).map(([k, v]) => `${k} ${n(v)}`).join(', '))}${
+        r.dtilCount > Object.keys(r.dtils || {}).length ? ` <span class="muted">외 ${n(r.dtilCount - Object.keys(r.dtils).length)}개</span>` : ''
+      }</td>
       <td class="nowrap small">${r.minDate ? `등록 ${ymd(r.minDate)} ~ ${ymd(r.maxDate)}` : '-'}</td>
       <td class="num">${n(r.total)}${r.bad ? ` <span class="muted small">(건너뜀 ${n(r.bad)})</span>` : ''}</td>
       <td class="num">${n(r.inserted)}</td>
       <td class="num">${n(r.updated)}</td>
       <td class="num">${n(r.keptApi)}</td>
-      <td class="small">${r.corpMarked ? '업체 전체 등록품목으로 기록 (업체 실적 "전체 품목" 이 다시 받자고 묻지 않음)' : '<span class="muted">-</span>'}</td>
+      <td class="small">${
+        r.corpMarked
+          ? r.whole
+            ? '쇼핑몰 전체 등록 내역으로 기록 (업체 실적 "전체 품목" 이 등록품목 받기를 묻지 않음)'
+            : '업체 전체 등록품목으로 기록 (업체 실적 "전체 품목" 이 다시 받자고 묻지 않음)'
+          : '<span class="muted">-</span>'
+      }</td>
     </tr>`
           : `<tr>
       <td class="small">${esc(r.file)}</td>

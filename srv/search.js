@@ -549,6 +549,7 @@ export function corpsNotFetched(corps) {
     return corps; // 표가 아직 없다 (한 번도 받지 않음)
   }
   const terms = new Set(saved.map((r) => r.term));
+  if (terms.has('*')) return []; // 쇼핑몰 전체 등록 내역 파일을 가져왔다 (importer.js)
   const biznos = new Set();
   for (const r of saved) {
     try {
