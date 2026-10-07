@@ -396,6 +396,20 @@ async function boot() {
   $('#impPickFiles').addEventListener('click', () => $('#impFiles').click());
   $('#impPickDir').addEventListener('click', () => $('#impDir').click());
   $('#impPathRun').addEventListener('click', importFromPath);
+  // 파일을 카드에 끌어다 놓아도 가져온다
+  const card = $('#impCard');
+  card.addEventListener('dragover', (e) => {
+    if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+    e.preventDefault();
+    card.classList.add('drop-on');
+  });
+  card.addEventListener('dragleave', (e) => !card.contains(e.relatedTarget) && card.classList.remove('drop-on'));
+  card.addEventListener('drop', (e) => {
+    e.preventDefault();
+    card.classList.remove('drop-on');
+    if ($('#impPickFiles').disabled) return; // 가져오는 중
+    importFiles([...(e.dataTransfer?.files || [])]);
+  });
   api('/import/last')
     .then((r) => r.path && !$('#impPath').value && ($('#impPath').value = r.path))
     .catch(() => {});

@@ -462,3 +462,6 @@ button.btn.small { padding: 4px 10px; font-size: 12px; }
 /* 기간 그래프 두 줄 축: 연도 글자와 해가 바뀌는 곳의 세로선 */
 .viz svg .tick.year { fill: var(--text); font-weight: 600; }
 .viz svg .yearsep { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
+
+/* 파일 가져오기 — 끌어다 놓는 중 */
+#impCard.drop-on { outline: 2px dashed var(--brand); outline-offset: -6px; background: var(--panel-2); }
