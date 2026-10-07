@@ -32,6 +32,32 @@ function dtilWhere(w, value) {
   return isDtilName(t) ? w.add('dtil_clsfc_nm = ?', t) : w.add('dtil_clsfc_nm LIKE ?', like(t));
 }
 
+/**
+ * 파일로 넣은 쇼핑몰 등록품목(전체 등록 내역은 100만 줄)은 휴대폰에 통째로 보내지 않고 세부품명 묶음 64개로 나눠 두었다가,
+ * 휴대폰이 그 세부품명을 검색할 때 그 묶음만 받는다. 세부품명 → 묶음 번호(00~3f) — 관리자 PC(publish.js)와 휴대폰(mobile/worker.js)이 같이 쓴다.
+ */
+export const PD_BUCKETS = 64;
+export function pdBucket(dtil) {
+  let h = 0x811c9dc5; // FNV-1a
+  for (const ch of String(dtil ?? '')) {
+    h ^= ch.codePointAt(0);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return (h % PD_BUCKETS).toString(16).padStart(2, '0');
+}
+
+/** 세부품명 조건(일부만 넣어도 됨)에 드는 세부품명 이름들 — dtilWhere 와 같은 규칙, 이름은 물품분류 목록에서 */
+export function dtilNamesFor(term) {
+  const t = String(term ?? '').trim();
+  if (!t) return [];
+  if (isDtilName(t)) return [t];
+  try {
+    return db.prepare(`SELECT DISTINCT name FROM clsfc WHERE kind = 'dtil' AND name LIKE ? LIMIT 300`).all(like(t)).map((r) => r.name);
+  } catch {
+    return [];
+  }
+}
+
 /** WHERE 절과 바인딩 값을 같이 모아주는 작은 헬퍼 */
 function where() {
   const parts = [];

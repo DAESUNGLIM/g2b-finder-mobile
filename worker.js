@@ -197,7 +197,8 @@ async function installBase(m) {
       pool.unlink(state.slot);
     } catch {}
   }
-  await writeState({ slot: next, baseId: m.base.id, mbaseId: mb.id, applied: mb.seq, dataAt: mb.createdAt, baseAt: mb.createdAt });
+  // 새 기본자료에는 파일 등록품목 묶음이 없다 — 다시 검색할 때 받는다
+  await writeState({ slot: next, baseId: m.base.id, mbaseId: mb.id, applied: mb.seq, dataAt: mb.createdAt, baseAt: mb.createdAt, pdLoaded: {} });
   overviewCache = null;
 }
 
@@ -247,6 +248,80 @@ function applyPatch(p) {
   });
 }
 
+/* ── 파일로 넣은 등록품목 — 세부품명 묶음을 필요할 때 받기 ── */
+
+/**
+ * 관리자 PC 가 파일로 넣은 쇼핑몰 등록품목(전체 등록 내역은 100만 줄)은 모바일 기본자료에 없다.
+ * 등록품목을 세부품명으로 검색하면 그 세부품명이 든 묶음(pd-xx.json.gz, 1MB 안팎)을 배포 폴더에서 받아 넣는다.
+ * 한 번 받은 묶음은 휴대폰에 두고, 관리자 PC 가 묶음을 바꿨을 때만 다시 받는다 (publish.js publishProductBuckets).
+ */
+let pdFiles = null; // 배포 목록의 묶음 { '0a': { file, sha, rows } }
+const pdLoading = new Map();
+/** 세부품명이 일부만 들어오면 묶음이 여럿일 수 있다 — 너무 넓은 글자면 앞의 몇 묶음만 */
+const PD_MAX = 6;
+
+async function ensurePd(term) {
+  if (!pdFiles || !String(term || '').trim()) return;
+  const keys = [...new Set(store.dtilNamesFor(term).map(store.pdBucket))].filter((k) => pdFiles[k]).slice(0, PD_MAX);
+  await Promise.all(keys.map((k) => loadPd(k)));
+}
+
+function loadPd(k) {
+  const f = pdFiles?.[k];
+  if (!f || (state.pdLoaded || {})[k] === f.sha) return null;
+  if (pdLoading.has(k)) return pdLoading.get(k);
+  const job = (async () => {
+    const j = await fetchGzJson(f.file);
+    const d = rawDb();
+    if (!d) return;
+    post({ type: 'pd', loading: true });
+    // 휴대폰 저장소(OPFS)에 되돌리기 기록(저널)을 줄마다 쓰면 몇 배 느려(4만 줄에 12초 → 1초) 넣는 동안만 메모리에 둔다.
+    // 그사이 앱이 꺼지면 DB 가 깨질 수 있어, 표시해 두었다가 다음에 켤 때 검사한다 (checkAfterPd).
+    await writeState({ pdBusy: k });
+    d.exec('PRAGMA cache_size = -262144');
+    d.exec('PRAGMA journal_mode = MEMORY');
+    try {
+      transaction(() => {
+        d.exec({ sql: `DELETE FROM product WHERE seen_run LIKE 'file:%' AND dtil_clsfc_nm IN (SELECT value FROM json_each(?))`, bind: [JSON.stringify(j.dtils)] });
+        // 줄마다 값을 넘기면 느려서(WebAssembly 오가기), 묶음 전체를 JSON 하나로 넘겨 SQLite 가 풀게 한다
+        d.exec({
+          sql: `INSERT OR REPLACE INTO product(${j.cols.join(',')})
+                  SELECT ${j.cols.map((_, i) => `value ->> ${i}`).join(',')} FROM json_each(?)`,
+          bind: [JSON.stringify(j.rows)],
+        });
+      });
+    } finally {
+      d.exec('PRAGMA journal_mode = DELETE');
+      d.exec('PRAGMA cache_size = -24000');
+    }
+    await writeState({ pdBusy: null, pdLoaded: { ...(state.pdLoaded || {}), [k]: f.sha } });
+  })().finally(() => {
+    pdLoading.delete(k);
+    if (!pdLoading.size) post({ type: 'pd', loading: false });
+  });
+  pdLoading.set(k, job);
+  return job;
+}
+
+/** 묶음을 넣다가 앱이 꺼졌으면 DB 를 검사하고, 깨졌으면 기본자료부터 다시 받게 한다 */
+async function checkAfterPd() {
+  if (!state.pdBusy) return;
+  let ok = false;
+  try {
+    ok = rawDb()?.selectValue('PRAGMA quick_check(1)') === 'ok';
+  } catch {}
+  if (ok) {
+    const loaded = { ...(state.pdLoaded || {}) };
+    delete loaded[state.pdBusy]; // 다 들어갔는지 모른다 — 다시 받는다
+    return writeState({ pdBusy: null, pdLoaded: loaded });
+  }
+  try {
+    rawDb()?.close();
+  } catch {}
+  setDb(null);
+  await writeState({ pdBusy: null, mbaseId: null, pdLoaded: {} }); // 다음 확인에서 기본자료를 새로 받는다
+}
+
 let checking = null;
 /** 배포 폴더 확인 — 새 기본자료면 받아서 바꾸고, 아니면 변경분만 더한다 */
 function checkFeed() {
@@ -269,6 +344,7 @@ function checkFeed() {
         }
       }
       if (Array.isArray(m.myCorps)) setConfig('myCorps', m.myCorps);
+      pdFiles = m.pd?.files || null;
       let applied = state.applied || 0;
       let n = 0;
       for (const p of m.patches || []) {
@@ -458,7 +534,10 @@ async function route(method, url, body) {
     };
   }
 
-  if (path === '/products' && method === 'GET') return store.searchProducts(q);
+  if (path === '/products' && method === 'GET') {
+    await ensurePd(q.dtil).catch(() => {}); // 못 받아도 API 로 받은 품목은 나온다
+    return store.searchProducts(q);
+  }
   if (path === '/orders' && method === 'GET') return store.searchOrders(q);
   if (path === '/orders/history' && method === 'GET') return { rows: store.orderHistory(q.no, q.sno) };
   if (path === '/aggregate' && method === 'GET') return store.aggregateOrders(q);
@@ -489,7 +568,10 @@ async function route(method, url, body) {
     }
     return { dtils, jobs, unknown: store.corpsNotFetched(q.corps), remainingCalls: 0, mock: false, collecting: false };
   }
-  if (path === '/perf' && method === 'GET') return store.performance(q);
+  if (path === '/perf' && method === 'GET') {
+    if (q.listing) await ensurePd(q.fDtil).catch(() => {}); // 업체별 "쇼핑몰 등록 N개"
+    return store.performance(q);
+  }
   if (path === '/perf/years' && method === 'GET') return store.orderYears();
   if (path === '/perf/top' && method === 'GET') return store.perfTop(q);
 
@@ -526,6 +608,7 @@ async function start() {
   sqlite3 = await sqlite3InitModule();
   pool = await sqlite3.installOpfsSAHPoolVfs({ name: POOL, initialCapacity: 6 });
   if (state.slot && pool.getFileNames().includes(state.slot)) setDb(openSlot(state.slot));
+  await checkAfterPd();
   if (!rawDb()) {
     if (!state.feed) {
       setPhase('need-link');
@@ -582,7 +665,7 @@ self.addEventListener('message', async (e) => {
         pool?.unlink(s);
       } catch {}
     }
-    await writeState({ slot: null, baseId: null, mbaseId: null, applied: 0 });
+    await writeState({ slot: null, baseId: null, mbaseId: null, applied: 0, pdLoaded: {} });
     return post({ type: 'reload', why: '받은 자료를 지웠습니다.' });
   }
   if (msg.type !== 'api') return;

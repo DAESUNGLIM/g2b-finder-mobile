@@ -94,6 +94,18 @@
     });
   }
 
+  // 파일로 넣은 등록품목 묶음을 처음 받을 때 (worker.js loadPd) — 검색이 몇 초 늦는 까닭을 알린다
+  let toast = null;
+  function pdToast(on) {
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'mPdToast';
+      toast.textContent = '이 품목의 등록품목을 처음 받는 중입니다… (한 번만, 10~20초)';
+      document.body.append(toast);
+    }
+    toast.hidden = !on;
+  }
+
   let shownReady = false;
   worker.addEventListener('message', (e) => {
     const m = e.data || {};
@@ -108,6 +120,7 @@
       setTimeout(() => location.reload(), 1200);
       return;
     }
+    if (m.type === 'pd') return pdToast(m.loading);
     if (m.type !== 'status') return;
     const s = m.status;
     if (s.phase === 'need-link') return askLink(s.error);
