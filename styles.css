@@ -465,3 +465,7 @@ button.btn.small { padding: 4px 10px; font-size: 12px; }
 
 /* 파일 가져오기 — 끌어다 놓는 중 */
 #impCard.drop-on { outline: 2px dashed var(--brand); outline-offset: -6px; background: var(--panel-2); }
+
+/* 계약 내역 — 묶어 보기에서 누르면 그 업체·기관 목록으로 */
+#ctTable tr.clickable { cursor: pointer; }
+#ctTable tr.clickable:hover td { background: var(--hover, rgba(127,127,127,.08)); }

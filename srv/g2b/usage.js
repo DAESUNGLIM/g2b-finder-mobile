@@ -18,6 +18,7 @@ export const API_SERVICES = [
   },
   { id: 'usr', label: '나라장터 사용자정보', test: (op) => /^getPrcrmnt/.test(op) },
   { id: 'thng', label: '물품목록정보', test: (op) => /^getPrdctClsfcNo/.test(op) },
+  { id: 'cntrct', label: '계약정보', test: (op) => /^getCntrctInfo/.test(op) },
 ];
 
 /** 모르는 오퍼레이션은 주된 서비스(쇼핑몰)로 본다 — 한도를 넉넉히 잡는 쪽이 아니라 빡빡하게 잡는 쪽. */

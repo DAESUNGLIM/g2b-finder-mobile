@@ -30,6 +30,7 @@
 <nav>
   <button data-tab="orders">거래내역</button>
   <button data-tab="products">등록품목</button>
+  <button data-tab="contracts" class="admin-only">계약 내역</button>
   <button data-tab="mine">업체 실적</button>
   <button data-tab="marks">관심목록</button>
   <button data-tab="compare">물품비교</button>
@@ -261,6 +262,87 @@
     <div class="row small muted" id="pCount"></div>
     <div class="tablewrap" style="margin-top: 8px"><table id="pTable"></table></div>
     <div class="pager" id="pPager"></div>
+  </div>
+</section>
+
+<!-- ───────── 계약 내역 (관리자 PC 만) ───────── -->
+<section id="tab-contracts" hidden>
+  <div class="card">
+    <h2>계약 내역 검색 <span class="small muted">(공사·용역·물품 · 수의계약·경쟁 모두)</span></h2>
+    <p class="sub">나라장터에 등록된 모든 계약을 찾습니다. 조달청 계약정보를 최근 1년치 받아 두고, 3시간마다 새로 등록된 계약을 이어 받습니다. 변경계약은 마지막 차수 하나만 보여 줍니다.</p>
+    <div class="row small" id="ctStatus"></div>
+    <div class="grid filters" style="margin-top: 8px">
+      <div><label class="f">검색어</label><input type="text" id="ctKeyword" placeholder="계약명·공종 — 예) 배수로, 석공사" /></div>
+      <div><label class="f">기관</label><input type="text" id="ctInstt" placeholder="기관명·지역 — 예) 경남 의령군, 교육청" /></div>
+      <div><label class="f">업체</label><input type="text" id="ctCorp" placeholder="업체명 또는 사업자번호" /></div>
+      <div>
+        <label class="f">구분</label>
+        <select id="ctKind">
+          <option value="">전체</option>
+          <option>공사</option>
+          <option>용역</option>
+          <option>물품</option>
+          <option>외자</option>
+        </select>
+      </div>
+      <div>
+        <label class="f">계약방법</label>
+        <select id="ctMethod">
+          <option value="">전체</option>
+          <option value="수의">수의계약</option>
+          <option value="경쟁">경쟁 (일반·제한·지명)</option>
+          <option value="일반경쟁">일반경쟁</option>
+          <option value="제한경쟁">제한경쟁</option>
+          <option value="지명경쟁">지명경쟁</option>
+        </select>
+      </div>
+      <div><label class="f">계약일 시작</label><input type="date" id="ctFrom" /></div>
+      <div><label class="f">계약일 종료</label><input type="date" id="ctTo" /></div>
+      <div><label class="f">금액 이상</label><input type="number" id="ctAmtMin" placeholder="원" /></div>
+      <div><label class="f">금액 이하</label><input type="number" id="ctAmtMax" placeholder="원" /></div>
+      <div>
+        <label class="f">정렬</label>
+        <select id="ctSort">
+          <option value="recent">최신 계약일</option>
+          <option value="amtDesc">금액 큰 순</option>
+          <option value="amtAsc">금액 작은 순</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px">
+      <span class="spacer"></span>
+      <button class="btn" id="ctReset">초기화</button>
+      <button class="btn" id="ctCsv">CSV 내보내기</button>
+      <button class="btn primary" id="ctSearch">검색</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tiles" id="ctSummary"></div>
+    <div class="row viewbar">
+      <label class="f" for="ctView">보기</label>
+      <select id="ctView">
+        <option value="list">목록 (한 줄씩)</option>
+        <optgroup label="묶어 보기">
+          <option value="corp">업체별</option>
+          <option value="instt">계약기관별</option>
+          <option value="insttDiv">기관구분별</option>
+          <option value="month">월별</option>
+          <option value="clsfc">공종·업종별</option>
+          <option value="method">계약방법별</option>
+          <option value="kind">구분별</option>
+        </optgroup>
+      </select>
+      <select id="ctTop" hidden title="금액이 큰 순서로 몇 줄까지 볼지">
+        <option value="20">TOP 20</option>
+        <option value="50" selected>TOP 50</option>
+        <option value="100">TOP 100</option>
+        <option value="200">TOP 200</option>
+      </select>
+      <span class="small muted" id="ctViewHint"></span>
+    </div>
+    <div class="tablewrap"><table id="ctTable"></table></div>
+    <div class="pager" id="ctPager"></div>
   </div>
 </section>
 

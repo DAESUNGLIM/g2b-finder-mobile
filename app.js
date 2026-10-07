@@ -13,6 +13,10 @@ const n = (v) => Number(v || 0).toLocaleString('ko-KR');
 /** 큰 금액은 억/만 단위로 줄여 읽기 쉽게 */
 function won(v) {
   const x = Number(v || 0);
+  if (x >= 1e12) {
+    const eok = Math.round(x / 1e8);
+    return `${Math.floor(eok / 1e4).toLocaleString('ko-KR')}조 ${(eok % 1e4).toLocaleString('ko-KR')}억`;
+  }
   if (x >= 1e8) return (x / 1e8).toFixed(x >= 1e9 ? 0 : 1) + '억';
   if (x >= 1e4) return Math.round(x / 1e4).toLocaleString('ko-KR') + '만';
   return x.toLocaleString('ko-KR');
@@ -304,6 +308,7 @@ const TAB_LOADERS = {
   home: loadHome,
   orders: () => searchOrders(1, 'ask'),
   products: () => searchProducts(1, 'ask'),
+  contracts: loadContracts,
   compare: loadCompare,
   mine: () => loadPerf(),
   marks: loadBookmarks,
@@ -328,7 +333,7 @@ function lastSub(group) {
 }
 
 function showTab(name) {
-  if (state.viewer && (name === 'home' || name === 'settings' || name === 'manage')) name = 'orders'; // 검색 전용은 수집·설정이 없다
+  if (state.viewer && ['home', 'settings', 'manage', 'contracts'].includes(name)) name = 'orders'; // 검색 전용은 수집·설정·계약 내역이 없다
   if (TAB_GROUPS[name]) name = lastSub(name);
   if (!$('#tab-' + name)) name = 'home';
   const group = groupOf(name);
@@ -466,6 +471,8 @@ async function boot() {
   $('#pKeyword').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
   $('#pDtil').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
   $('#pCorp').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
+
+  initContracts();
 
   $('#mRun').addEventListener('click', () => loadPerf('auto'));
   loadPerfCorps();
@@ -822,7 +829,7 @@ function renderBadges() {
   mode.className = 'badge ' + (s.mock ? 'warn' : 'ok');
 
   // 한도는 서비스마다 따로다. 배지에는 주로 쓰는 쇼핑몰 서비스를 적고,
-  // 마우스를 올리면 세 서비스를 모두 보여준다.
+  // 마우스를 올리면 모든 서비스를 보여준다.
   const u = state.meta?.usage;
   const limit = s.dailyLimit || 1000;
   const svcs = u?.services || [];
@@ -832,7 +839,7 @@ function renderBadges() {
   b.textContent = `오늘 API 쇼핑몰 ${n(used)} / ${n(shop?.limit || limit)}회`;
   b.title = svcs.length
     ? svcs.map((x) => `${x.label} ${n(x.used)} / ${n(x.limit)}회`).join('\n') +
-      '\n\n세 서비스는 따로 활용신청한 별개의 API 라 하루 한도도 각각 따로입니다.'
+      '\n\n서비스마다 따로 활용신청한 별개의 API 라 하루 한도도 각각 따로입니다.'
     : '';
   b.className = 'badge ' + (svcs.some((x) => x.used > x.limit * 0.9) ? 'warn' : '');
 }
@@ -1818,6 +1825,199 @@ async function searchProducts(page, fillMode) {
 
 /** 등록품목을 자동으로 받을 때 거슬러 올라가는 기간 (등록일 기준) */
 const PRODUCT_FILL_DAYS = 730;
+
+/* ── 계약 내역 (관리자 PC 만 — 조달청 계약정보) ──────────────────── */
+
+const ct = { page: 1, size: 50, searched: false, poll: null };
+
+function contractQuery() {
+  return {
+    keyword: $('#ctKeyword').value.trim(),
+    instt: $('#ctInstt').value.trim(),
+    corp: $('#ctCorp').value.trim(),
+    kind: $('#ctKind').value,
+    method: $('#ctMethod').value,
+    from: dateVal('#ctFrom'),
+    to: dateVal('#ctTo'),
+    amtMin: $('#ctAmtMin').value,
+    amtMax: $('#ctAmtMax').value,
+    sort: $('#ctSort').value,
+  };
+}
+
+const ctView = () => $('#ctView').value;
+
+/** 1234567890 → 123-45-67890 */
+const fmtBizno = (v) => {
+  const s = String(v || '').replace(/[^0-9]/g, '');
+  return s.length === 10 ? `${s.slice(0, 3)}-${s.slice(3, 5)}-${s.slice(5)}` : s;
+};
+
+/** 받은 자료·받는 중인 것 — 받는 중이면 5초마다 다시 본다 */
+async function loadContractStatus() {
+  clearTimeout(ct.poll);
+  const s = await api('/contracts/status').catch(() => null);
+  if (!s) return;
+  const el = $('#ctStatus');
+  if (s.mock) {
+    el.innerHTML = '<span class="muted">샘플 모드에서는 계약 내역을 받지 않습니다. 설정에서 서비스키를 넣어 주세요.</span>';
+    return;
+  }
+  const parts = [`받은 계약 <b>${n(s.rows)}</b>건`];
+  parts.push(
+    s.daysDone >= s.days - 2
+      ? '최근 1년 모두 받음'
+      : `최근 1년 중 <b>${n(s.daysDone)}</b>일 받음${s.oldestDone ? ` (${ymd(s.oldestDone)}까지 거슬러 받음)` : ''}`
+  );
+  parts.push(`오늘 계약정보 API ${n(s.usedToday)} / ${n(s.limit)}회`);
+  let tail = '';
+  if (s.running) tail = ` <span class="badge ok">받는 중 — ${esc(s.running.step || '준비')} · ${n(s.running.rows)}건</span>`;
+  else if (s.last?.error) tail = ` <span class="badge warn">지난번 받기 실패: ${esc(s.last.error)}</span>`;
+  else if (s.last?.stopped) tail = ` <span class="muted">${esc(s.last.stopped)}</span>`;
+  const more = !s.running && s.pending > 0;
+  el.innerHTML =
+    `<span class="muted">${parts.join(' · ')}</span>${tail}` +
+    (more ? ' <button class="btn small" id="ctSync" title="3시간을 기다리지 않고 지금 이어 받습니다">지금 이어 받기</button>' : '');
+  if (more) {
+    $('#ctSync').addEventListener('click', async () => {
+      await api('/contracts/sync', { method: 'POST' });
+      setTimeout(loadContractStatus, 1500);
+    });
+  }
+  if (s.running && !$('#tab-contracts').hidden) ct.poll = setTimeout(loadContractStatus, 5000);
+}
+
+function loadContracts() {
+  loadContractStatus();
+  if (!ct.searched) searchContracts(1);
+}
+
+function applyContractView() {
+  const list = ctView() === 'list';
+  $('#ctTop').hidden = list;
+  $('#ctSort').disabled = !list;
+  $('#ctViewHint').textContent = list
+    ? ''
+    : ['corp', 'instt'].includes(ctView())
+      ? '금액이 큰 순서 · 줄을 누르면 그 계약 목록을 봅니다'
+      : '금액이 큰 순서';
+}
+
+const CT_GROUP_HEAD = {
+  corp: '업체', instt: '계약기관', insttDiv: '기관구분', month: '월', clsfc: '공종·업종', method: '계약방법', kind: '구분',
+};
+
+async function searchContracts(page = 1) {
+  ct.page = page;
+  ct.searched = true;
+  const view = ctView();
+  const q = contractQuery();
+  $('#ctTable').innerHTML = '<tbody><tr><td class="empty">찾는 중…</td></tr></tbody>';
+  let data;
+  try {
+    data = await api('/contracts?' + qs({ ...q, view: view === 'list' ? '' : view, top: $('#ctTop').value, page, size: ct.size }));
+  } catch (err) {
+    $('#ctTable').innerHTML = `<tbody><tr><td class="empty">${esc(err.message)}</td></tr></tbody>`;
+    return;
+  }
+  $('#ctSummary').innerHTML = tiles([
+    { k: '계약 건수', v: n(data.total), u: '건' },
+    { k: '계약금액 합계', v: won(data.amt), u: '원' },
+    ...(data.groups != null ? [{ k: CT_GROUP_HEAD[view] + ' 수', v: n(data.groups), u: '곳' }] : []),
+  ]);
+
+  if (view !== 'list') {
+    const total = data.amt || 1;
+    const label = (r) => (view === 'month' ? `${String(r.label).slice(0, 4)}-${String(r.label).slice(4)}` : r.label || '(없음)');
+    $('#ctTable').innerHTML = tableHtml(
+      [
+        { label: CT_GROUP_HEAD[view] },
+        { label: '건수', num: true },
+        { label: '수의계약', num: true },
+        { label: '계약금액', num: true },
+        { label: '비중', num: true },
+      ],
+      data.rows,
+      (r) => `<tr ${['corp', 'instt'].includes(view) ? `class="clickable" data-k="${esc(r.k)}"` : ''}>
+        <td>${esc(label(r))}${r.sub ? ` <span class="muted small">${esc(view === 'corp' ? fmtBizno(r.sub) : r.sub)}</span>` : ''}</td>
+        <td class="num">${n(r.n)}</td>
+        <td class="num">${n(r.sui)} <span class="muted small">${Math.round((r.sui / r.n) * 100)}%</span></td>
+        <td class="num nowrap" title="${n(r.amt)}원">${won(r.amt)}</td>
+        <td class="num">${((r.amt / total) * 100).toFixed(1)}%</td>
+      </tr>`
+    );
+    $$('#ctTable tr[data-k]').forEach((tr) =>
+      tr.addEventListener('click', () => {
+        $(view === 'corp' ? '#ctCorp' : '#ctInstt').value = tr.dataset.k;
+        $('#ctView').value = 'list';
+        applyContractView();
+        searchContracts(1);
+      })
+    );
+    $('#ctPager').innerHTML =
+      data.groups > data.rows.length
+        ? `<span class="small muted">${n(data.groups)}곳 가운데 금액이 큰 ${n(data.rows.length)}곳</span>`
+        : '';
+    return;
+  }
+
+  $('#ctTable').innerHTML = tableHtml(
+    [{ label: '계약일' }, { label: '계약명' }, { label: '계약기관' }, { label: '업체' }, { label: '계약금액', num: true }],
+    data.rows,
+    (r) => `<tr>
+      <td class="nowrap small">${ymd(r.cdate)}<div><span class="pill">${esc(r.kind)}</span></div></td>
+      <td><a href="${esc(r.url)}" target="_blank" rel="noopener" title="나라장터에서 계약 상세 보기"><b>${esc(r.name)}</b></a>
+        <div class="muted small">${[
+          `<span class="pill ${r.method === '수의계약' ? 'sme' : 'mas'}">${esc(r.method)}</span>`,
+          esc(r.clsfc),
+          r.lngtrm && r.lngtrm !== '신규' ? esc(r.lngtrm) : '',
+          r.chg && Number(r.chg) > 0 ? `${Number(r.chg)}차 변경` : '',
+          esc(r.prd),
+        ].filter(Boolean).join(' · ')}</div>
+        ${r.base_dtls ? `<div class="muted small" title="${esc(r.law)}">${esc(r.base_dtls)}</div>` : ''}
+      </td>
+      <td>${esc(r.instt_nm)}
+        <div class="muted small">${[esc(r.instt_div), esc(r.dept), esc(r.ofcl), esc(r.tel)].filter(Boolean).join(' · ')}</div>
+        ${r.dmnd ? `<div class="muted small">수요기관 ${esc(r.dmnd)}</div>` : ''}
+      </td>
+      <td>${esc(r.corp_nm)}
+        <div class="muted small">${fmtBizno(r.corp_bizno)}${
+          r.corp_n > 1 ? ` · <span title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳</span>` : ''
+        }</div>
+      </td>
+      <td class="num nowrap"><b title="${n(r.amt)}원">${won(r.amt)}</b>${
+        r.thtm_amt && r.thtm_amt !== r.amt ? `<div class="muted small">금차 ${won(r.thtm_amt)}</div>` : ''
+      }</td>
+    </tr>`
+  );
+  pager('#ctPager', data.total, page, ct.size, (p) => searchContracts(p));
+}
+
+function initContracts() {
+  const resetDates = () => {
+    $('#ctFrom').value = daysAgo(365);
+    $('#ctTo').value = daysAgo(0);
+  };
+  resetDates();
+  $('#ctSearch').addEventListener('click', () => searchContracts(1));
+  for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctAmtMin', '#ctAmtMax']) {
+    $(id).addEventListener('keydown', (e) => e.key === 'Enter' && searchContracts(1));
+  }
+  for (const id of ['#ctKind', '#ctMethod', '#ctSort', '#ctTop']) {
+    $(id).addEventListener('change', () => searchContracts(1));
+  }
+  $('#ctView').addEventListener('change', () => {
+    applyContractView();
+    searchContracts(1);
+  });
+  $('#ctReset').addEventListener('click', () => {
+    for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctAmtMin', '#ctAmtMax', '#ctKind', '#ctMethod']) $(id).value = '';
+    resetDates();
+    searchContracts(1);
+  });
+  $('#ctCsv').addEventListener('click', () => openExport('/api/export?' + qs({ kind: 'contracts', ...contractQuery() })));
+  applyContractView();
+}
 
 /* ── 물품비교 (관심목록 탭에서 체크한 물품의 비교표) ─────────────── */
 
