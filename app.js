@@ -1019,7 +1019,7 @@ async function loadCorpLocInfo() {
     const run = s.running
       ? ` · <b>채우는 중</b> ${n(r?.done || 0)} / ${n(r?.total || 0)}곳`
       : r
-        ? ` · 마지막: ${n(r.found)}곳 채움${r.error ? ` — <span style="color:var(--danger)">${esc(r.error)}</span>` : ''}`
+        ? ` · 마지막: ${n(r.found)}곳 채움${r.fromReg ? ' (받아 둔 조달업체 주소에서, API 호출 없음)' : ''}${r.error ? ` — <span style="color:var(--danger)">${esc(r.error)}</span>` : ''}`
         : '';
     $('#corpLocInfo').innerHTML =
       `거래 업체 ${n(s.corps)}곳 중 <b>${n(s.known)}곳(${pct}%)</b> 소재지 확인 · 남은 업체 ${n(s.pending)}곳` +
