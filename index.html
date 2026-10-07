@@ -275,6 +275,7 @@
       <div><label class="f">검색어</label><input type="text" id="ctKeyword" placeholder="계약명·공종 — 예) 배수로, 석공사" /></div>
       <div><label class="f">기관</label><input type="text" id="ctInstt" placeholder="기관명·지역 — 예) 경남 의령군, 교육청" /></div>
       <div><label class="f">업체</label><input type="text" id="ctCorp" placeholder="업체명 또는 사업자번호" /></div>
+      <div><label class="f">업체 소재지</label><input type="text" id="ctCorpLoc" placeholder="예) 경남, 경기도 화성시" /></div>
       <div>
         <label class="f">구분</label>
         <select id="ctKind">
@@ -325,6 +326,8 @@
         <option value="list">목록 (한 줄씩)</option>
         <optgroup label="묶어 보기">
           <option value="corp">업체별</option>
+          <option value="corpSido">업체소재 시·도별</option>
+          <option value="corpLoc">업체소재지별</option>
           <option value="instt">계약기관별</option>
           <option value="insttDiv">기관구분별</option>
           <option value="month">월별</option>

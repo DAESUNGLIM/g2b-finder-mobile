@@ -1835,6 +1835,7 @@ function contractQuery() {
     keyword: $('#ctKeyword').value.trim(),
     instt: $('#ctInstt').value.trim(),
     corp: $('#ctCorp').value.trim(),
+    corpLoc: $('#ctCorpLoc').value.trim(),
     kind: $('#ctKind').value,
     method: $('#ctMethod').value,
     from: dateVal('#ctFrom'),
@@ -1870,8 +1871,17 @@ async function loadContractStatus() {
       : `최근 1년 중 <b>${n(s.daysDone)}</b>일 받음${s.oldestDone ? ` (${ymd(s.oldestDone)}까지 거슬러 받음)` : ''}`
   );
   parts.push(`오늘 계약정보 API ${n(s.usedToday)} / ${n(s.limit)}회`);
+  const reg = s.reg;
+  if (reg) {
+    parts.push(
+      reg.yearsDone >= reg.years
+        ? `업체 소재지 ${n(reg.rows)}곳`
+        : `업체 소재지 받는 중 ${n(reg.rows)}곳 (등록연도 ${n(reg.yearsDone)} / ${n(reg.years)}년)`
+    );
+  }
   let tail = '';
   if (s.running) tail = ` <span class="badge ok">받는 중 — ${esc(s.running.step || '준비')} · ${n(s.running.rows)}건</span>`;
+  else if (reg?.running) tail = ` <span class="badge ok">받는 중 — ${esc(reg.running.step || '준비')}</span>`;
   else if (s.last?.error) tail = ` <span class="badge warn">지난번 받기 실패: ${esc(s.last.error)}</span>`;
   else if (s.last?.stopped) tail = ` <span class="muted">${esc(s.last.stopped)}</span>`;
   const more = !s.running && s.pending > 0;
@@ -1884,7 +1894,7 @@ async function loadContractStatus() {
       setTimeout(loadContractStatus, 1500);
     });
   }
-  if (s.running && !$('#tab-contracts').hidden) ct.poll = setTimeout(loadContractStatus, 5000);
+  if ((s.running || reg?.running) && !$('#tab-contracts').hidden) ct.poll = setTimeout(loadContractStatus, 5000);
 }
 
 function loadContracts() {
@@ -1898,13 +1908,16 @@ function applyContractView() {
   $('#ctSort').disabled = !list;
   $('#ctViewHint').textContent = list
     ? ''
-    : ['corp', 'instt'].includes(ctView())
+    : CT_CLICK[ctView()]
       ? '금액이 큰 순서 · 줄을 누르면 그 계약 목록을 봅니다'
       : '금액이 큰 순서';
 }
 
+/** 묶어 보기에서 줄을 누르면 채울 칸 */
+const CT_CLICK = { corp: '#ctCorp', instt: '#ctInstt', corpSido: '#ctCorpLoc', corpLoc: '#ctCorpLoc' };
+
 const CT_GROUP_HEAD = {
-  corp: '업체', instt: '계약기관', insttDiv: '기관구분', month: '월', clsfc: '공종·업종', method: '계약방법', kind: '구분',
+  corp: '업체', corpSido: '업체소재 시·도', corpLoc: '업체소재지', instt: '계약기관', insttDiv: '기관구분', month: '월', clsfc: '공종·업종', method: '계약방법', kind: '구분',
 };
 
 async function searchContracts(page = 1) {
@@ -1925,6 +1938,12 @@ async function searchContracts(page = 1) {
     { k: '계약금액 합계', v: won(data.amt), u: '원' },
     ...(data.groups != null ? [{ k: CT_GROUP_HEAD[view] + ' 수', v: n(data.groups), u: '곳' }] : []),
   ]);
+  if (data.regPartial) {
+    $('#ctSummary').insertAdjacentHTML(
+      'beforeend',
+      '<div class="notice warn" style="grid-column: 1 / -1">조달업체 주소를 아직 받는 중이라, 소재지를 모르는 업체의 계약은 빠지거나 "(소재지 모름)"으로 나옵니다. 다 받으면(이틀쯤) 저절로 채워집니다.</div>'
+    );
+  }
 
   if (view !== 'list') {
     const total = data.amt || 1;
@@ -1938,8 +1957,10 @@ async function searchContracts(page = 1) {
         { label: '비중', num: true },
       ],
       data.rows,
-      (r) => `<tr ${['corp', 'instt'].includes(view) ? `class="clickable" data-k="${esc(r.k)}"` : ''}>
-        <td>${esc(label(r))}${r.sub ? ` <span class="muted small">${esc(view === 'corp' ? fmtBizno(r.sub) : r.sub)}</span>` : ''}</td>
+      (r) => `<tr ${CT_CLICK[view] && r.k ? `class="clickable" data-k="${esc(r.k)}"` : ''}>
+        <td>${esc(label(r))}${r.sub ? ` <span class="muted small">${esc(view === 'corp' ? fmtBizno(r.sub) : r.sub)}</span>` : ''}${
+          r.loc ? ` <span class="loc small">${esc(r.loc)}</span>` : ''
+        }</td>
         <td class="num">${n(r.n)}</td>
         <td class="num">${n(r.sui)} <span class="muted small">${Math.round((r.sui / r.n) * 100)}%</span></td>
         <td class="num nowrap" title="${n(r.amt)}원">${won(r.amt)}</td>
@@ -1948,7 +1969,7 @@ async function searchContracts(page = 1) {
     );
     $$('#ctTable tr[data-k]').forEach((tr) =>
       tr.addEventListener('click', () => {
-        $(view === 'corp' ? '#ctCorp' : '#ctInstt').value = tr.dataset.k;
+        $(CT_CLICK[view]).value = tr.dataset.k;
         $('#ctView').value = 'list';
         applyContractView();
         searchContracts(1);
@@ -1981,7 +2002,7 @@ async function searchContracts(page = 1) {
         ${r.dmnd ? `<div class="muted small">수요기관 ${esc(r.dmnd)}</div>` : ''}
       </td>
       <td>${esc(r.corp_nm)}
-        <div class="muted small">${fmtBizno(r.corp_bizno)}${
+        <div class="muted small">${r.corp_loc ? `<span class="loc">${esc(r.corp_loc)}</span> · ` : ''}${fmtBizno(r.corp_bizno)}${
           r.corp_n > 1 ? ` · <span title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳</span>` : ''
         }</div>
       </td>
@@ -2000,7 +2021,7 @@ function initContracts() {
   };
   resetDates();
   $('#ctSearch').addEventListener('click', () => searchContracts(1));
-  for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctAmtMin', '#ctAmtMax']) {
+  for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax']) {
     $(id).addEventListener('keydown', (e) => e.key === 'Enter' && searchContracts(1));
   }
   for (const id of ['#ctKind', '#ctMethod', '#ctSort', '#ctTop']) {
@@ -2011,7 +2032,7 @@ function initContracts() {
     searchContracts(1);
   });
   $('#ctReset').addEventListener('click', () => {
-    for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctAmtMin', '#ctAmtMax', '#ctKind', '#ctMethod']) $(id).value = '';
+    for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax', '#ctKind', '#ctMethod']) $(id).value = '';
     resetDates();
     searchContracts(1);
   });
