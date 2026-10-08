@@ -1964,21 +1964,18 @@ function applyContractView() {
   $('#ctSort').disabled = !list;
   $('#ctViewHint').textContent = list
     ? ''
-    : ctView() === 'corp' && corpOpensPerf()
+    : ctView() === 'corp'
       ? '금액이 큰 순서 · 줄을 누르면 그 업체의 계약 실적을 봅니다'
       : CT_CLICK[ctView()]
         ? '금액이 큰 순서 · 줄을 누르면 그 계약 목록을 봅니다'
         : '금액이 큰 순서';
 }
 
-/** 업체별 줄을 누르면 계약 실적을 여는지 — 계약 실적 탭이 있는 구분(공사·용역·전체)에서만. 물품은 계약 목록으로 */
-const corpOpensPerf = () => BIZ[bizNow()].tabs.includes('cperf');
-
 /** 줄마다 구분 표시 — 구분이 하나로 정해진 화면에서는 모두 같은 글자라 뺀다 (물품은 외자만 표시) */
 const kindPill = (k) => (bizNow() === '전체' || (bizNow() === '물품' && k === '외자') ? `<div><span class="pill">${esc(k)}</span></div>` : '');
 
-/** 묶어 보기에서 줄을 누르면 채울 칸 */
-const CT_CLICK = { corp: '#ctCorp', instt: '#ctInstt', corpSido: '#ctCorpLoc', corpLoc: '#ctCorpLoc' };
+/** 묶어 보기에서 줄을 누르면 채울 칸 (업체별은 칸을 채우지 않고 계약 실적을 연다) */
+const CT_CLICK = { corp: true, instt: '#ctInstt', corpSido: '#ctCorpLoc', corpLoc: '#ctCorpLoc' };
 
 const CT_GROUP_HEAD = {
   corp: '업체', corpSido: '업체소재 시·도', corpLoc: '업체소재지', instt: '계약기관', insttDiv: '기관구분', month: '월', clsfc: '공종·업종', method: '계약방법', kind: '구분',
@@ -2013,7 +2010,7 @@ async function searchContracts(page = 1) {
     $('#ctTable').innerHTML = contractGroupHtml(view, data, Boolean(CT_CLICK[view]));
     $$('#ctTable tr[data-k]').forEach((tr) =>
       tr.addEventListener('click', () => {
-        if (view === 'corp' && corpOpensPerf()) {
+        if (view === 'corp') {
           // 업체 줄은 그 업체의 계약 실적으로 (기간·계약방법은 지금 조건 그대로)
           const r = data.rows.find((x) => x.k === tr.dataset.k);
           $('#cpFrom').value = $('#ctFrom').value;
