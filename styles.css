@@ -62,7 +62,7 @@ header {
 #cpPick tr.clickable, #cpResult tr.clickable { cursor: pointer; }
 #cpPick tr.clickable:hover, #cpResult tr.clickable:hover { background: var(--panel-2); }
 .cp-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
-/* 계약기관 표는 이름이 길어 한 줄을 다 쓴다 — 기관명은 줄바꿈하지 않는다 */
+/* 계약기관·공종 표는 이름이 길어 한 줄을 다 쓴다 — 이름은 줄바꿈하지 않는다 */
 .cp-two .cp-wide { grid-column: 1 / -1; }
 .cp-wide td:first-child { white-space: nowrap; }
 .headinfo { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

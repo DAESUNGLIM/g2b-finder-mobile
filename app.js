@@ -2237,7 +2237,7 @@ async function showCperf() {
     </div>
     <div class="cp-two">
       ${side('cpInstt', '계약기관', r.instt, 'cp-wide')}
-      ${side('cpClsfc', '공종·업종', r.clsfc)}
+      ${side('cpClsfc', '공종·업종', r.clsfc, 'cp-wide')}
       ${side('cpMethodT', '계약방법', r.method)}
       ${r.kind ? side('cpKind', '구분', r.kind) : ''}
     </div>
