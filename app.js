@@ -2212,8 +2212,8 @@ async function showCperf() {
   const partNote = r.part.total
     ? `<div class="notice" style="margin-top:10px">공동도급 구성원으로 들어간 계약이 <b>${n(r.part.total)}</b>건 더 있습니다 (계약 전체 금액 ${won(r.part.amt)}원). 지분을 몰라 위 실적에는 넣지 않았습니다.</div>`
     : '';
-  const side = (id, title, d) =>
-    `<div class="card"><h2>${title}${d.groups > d.rows.length ? ` <span class="small muted">${n(d.groups)}곳 가운데 금액 큰 ${n(d.rows.length)}곳</span>` : ''}</h2><div class="tablewrap"><table id="${id}"></table></div></div>`;
+  const side = (id, title, d, cls = '') =>
+    `<div class="card ${cls}"><h2>${title}${d.groups > d.rows.length ? ` <span class="small muted">${n(d.groups)}곳 가운데 금액 큰 ${n(d.rows.length)}곳</span>` : ''}</h2><div class="tablewrap"><table id="${id}"></table></div></div>`;
   el.innerHTML = `
     <div class="card">
       <div class="card-head">
@@ -2236,7 +2236,7 @@ async function showCperf() {
       <details class="viz-table"><summary>표로 보기</summary><div class="tablewrap"><table id="cpMonth"></table></div></details>
     </div>
     <div class="cp-two">
-      ${side('cpInstt', '계약기관', r.instt)}
+      ${side('cpInstt', '계약기관', r.instt, 'cp-wide')}
       ${side('cpClsfc', '공종·업종', r.clsfc)}
       ${side('cpMethodT', '계약방법', r.method)}
       ${r.kind ? side('cpKind', '구분', r.kind) : ''}
