@@ -379,6 +379,56 @@
   <div id="cpResult"></div>
 </section>
 
+<!-- ───────── 통합 실적 (관리자 PC 만 · 전체에서) ───────── -->
+<section id="tab-iperf" hidden>
+  <div class="card">
+    <h2>통합 실적 <span class="small muted">(쇼핑몰 · 물품 · 공사 · 용역)</span>
+      <span class="info" tabindex="0" aria-label="통합 실적 설명">i<span class="info-pop" role="tooltip">
+        업체마다 쇼핑몰 납품요구와 물품·공사·용역 계약을 한데 모아 봅니다 (최대 10곳).<br>
+        <b>쇼핑몰</b>은 업체 실적 탭과 같은 납품요구 금액이고, 빠진 날짜는 업체 실적처럼 받아 채웁니다.<br>
+        <b>물품·공사·용역</b>은 그 업체가 <b>주계약업체</b>로 맺은 계약입니다. 계약은 최근 1년 동안 등록·변경된 것만 받아 둡니다.<br>
+        쇼핑몰 단가계약(제3자단가계약 등)은 계약정보에도 예상 총액으로 실려 있어, 두 번 세지 않도록 물품에서 뺍니다.
+      </span></span>
+    </h2>
+    <div class="row">
+      <div style="flex: 1; min-width: 260px"><label class="f">업체 추가</label><input type="text" id="ipSearch" placeholder="업체명 또는 사업자번호" /></div>
+      <button class="btn" id="ipAdd" type="button">찾아서 추가</button>
+      <div class="yearpick">
+        <label class="f">연도</label>
+        <button class="btn" id="ipYearBtn" type="button" title="체크한 해만 모읍니다 (떨어진 해도 고를 수 있음)">연도 선택 ▾</button>
+        <div class="yearpop" id="ipYearPop" hidden></div>
+      </div>
+      <div><label class="f">시작일</label><input type="date" id="ipFrom" /></div>
+      <div><label class="f">종료일</label><input type="date" id="ipTo" /></div>
+      <button class="btn" id="ipMine" type="button" title="수집 · 설정 → 설정에 등록한 내 회사를 추가합니다">내 회사 불러오기</button>
+      <button class="btn primary" id="ipRun" type="button">집계</button>
+    </div>
+    <div id="ipPick"></div>
+    <div class="chips" id="ipChips" style="margin-top: 10px"></div>
+    <div class="tablewrap" style="margin-top: 12px"><table id="ipSummary"></table></div>
+    <div id="ipNotes"></div>
+  </div>
+  <div class="card">
+    <div class="card-head">
+      <h2>기간별 통합 실적</h2>
+      <div class="row" style="gap: 8px">
+        <select id="ipSplit" title="막대를 업체마다 나눌지, 쇼핑몰·물품·공사·용역으로 나눌지 고릅니다 (구분별은 고른 업체 모두의 합)">
+          <option value="corp">업체별</option>
+          <option value="src">구분별</option>
+        </select>
+        <select id="ipPeriod">
+          <option value="year">연도별</option>
+          <option value="quarter">분기별</option>
+          <option value="month" selected>월별</option>
+        </select>
+      </div>
+    </div>
+    <div class="viz-legend" id="ipLegend"></div>
+    <div class="viz" id="ipChart"></div>
+    <details class="viz-table"><summary>표로 보기</summary><div class="tablewrap"><table id="ipTable"></table></div></details>
+  </div>
+</section>
+
 <!-- ───────── 물품비교 ───────── -->
 <section id="tab-compare" hidden>
   <div class="card">

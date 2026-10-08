@@ -717,6 +717,22 @@ function listingOf(q, biznos) {
 }
 
 /** 거래내역이 있는 해 (실적 탭 연도 선택) */
+/**
+ * 업체들의 쇼핑몰 계약번호 (거래내역·등록품목) — 통합 실적이 계약정보의 같은 단가계약을 빼는 데 쓴다.
+ * 등록품목에는 사업자번호 색인이 없어 한 번 훑는다 (100만 줄에 0.5초 안팎).
+ */
+export function shopContractNos(biznos) {
+  if (!biznos.length) return [];
+  const marks = biznos.map(() => '?').join(',');
+  return db
+    .prepare(
+      `SELECT DISTINCT cntrct_no no FROM order_item WHERE corp_bizno IN (${marks}) AND cntrct_no <> ''
+       UNION SELECT DISTINCT cntrct_no FROM product WHERE corp_bizno IN (${marks}) AND cntrct_no <> ''`
+    )
+    .all(...biznos, ...biznos)
+    .map((r) => r.no);
+}
+
 export function orderYears() {
   const r = db.prepare(`SELECT MIN(rcpt_date) a, MAX(rcpt_date) b FROM order_item`).get();
   if (!r.a) return [];

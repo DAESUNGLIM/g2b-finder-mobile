@@ -310,6 +310,7 @@ const TAB_LOADERS = {
   products: () => searchProducts(1, 'ask'),
   contracts: loadContracts,
   cperf: loadCperf,
+  iperf: () => showIperf('ask'),
   compare: loadCompare,
   mine: () => loadPerf(),
   marks: loadBookmarks,
@@ -361,6 +362,7 @@ const bizKinds = () => CKINDS[ckNow()].kinds;
 const bizTabs = () => [
   ...(BIZ[bizNow()].shop ? SHOP_TABS.map(([t]) => t) : []),
   ...(BIZ[bizNow()].ck.length ? ['contracts', 'cperf'] : []),
+  ...(bizNow() === '전체' ? ['iperf'] : []),
   'manage',
 ];
 
@@ -373,6 +375,8 @@ function renderNav() {
   const perf = conf.shop ? '계약 실적' : '업체 실적';
   if (!state.viewer) {
     for (const k of conf.ck) groups.push({ label: `${k} 계약`, cls: CKINDS[k].cls, kind: k, tabs: [['contracts', '계약 내역'], ['cperf', perf]] });
+    // 전체에서는 맨 끝(수집 · 설정 앞)에 쇼핑몰·물품·공사·용역을 합친 실적
+    if (bizNow() === '전체') groups.push({ label: '통합', cls: 'g-int', tabs: [['iperf', '통합 실적']] });
   }
   $('#navGroups').innerHTML = groups
     .map(
@@ -430,7 +434,7 @@ function setBiz(b) {
 }
 
 function showTab(name) {
-  if (state.viewer && ['home', 'settings', 'manage', 'contracts', 'cperf'].includes(name)) name = 'orders'; // 검색 전용은 수집·설정·계약 내역이 없다
+  if (state.viewer && ['home', 'settings', 'manage', 'contracts', 'cperf', 'iperf'].includes(name)) name = 'orders'; // 검색 전용은 수집·설정·계약 내역이 없다
   const tabs = bizTabs();
   if (!tabs.includes(TAB_GROUPS[name] ? name : groupOf(name)) && $('#tab-' + name)) {
     // 이 구분에 없는 메뉴 — 업체 실적은 짝(쇼핑몰 ↔ 계약)으로, 나머지는 첫 메뉴로
@@ -577,6 +581,7 @@ async function boot() {
 
   initContracts();
   initCperf();
+  initIperf();
 
   $('#mRun').addEventListener('click', () => loadPerf('auto'));
   loadPerfCorps();
@@ -2398,6 +2403,267 @@ function initCperf() {
   });
 }
 
+/* ── 통합 실적 (관리자 PC 만, 전체에서) — 업체마다 쇼핑몰·물품·공사·용역을 한데 ──────── */
+
+const IP_SRC = ['쇼핑몰', '물품', '공사', '용역'];
+/** corps: 추가한 업체 [{bizno, name, slot}] — slot 은 색 칸 (빼도 남은 업체 색은 그대로). 이 PC 브라우저에 기억 */
+const ip = { corps: [], years: new Set(), seq: 0, last: null };
+
+function saveIpCorps() {
+  try { localStorage.setItem('ipCorps', JSON.stringify(ip.corps)); } catch {}
+}
+
+/** 업체를 넣는다 — 이미 있거나 10곳이 차면 false */
+function addIpCorp(c) {
+  if (ip.corps.some((x) => x.bizno === c.bizno)) return false;
+  if (ip.corps.length >= PERF_CORPS_MAX) {
+    alert(`최대 ${PERF_CORPS_MAX}곳까지 비교할 수 있습니다. 칩의 × 로 업체를 빼고 넣어 주세요.`);
+    return false;
+  }
+  const used = new Set(ip.corps.map((x) => x.slot));
+  const slot = [...Array(PERF_CORPS_MAX).keys()].map((i) => i + 1).find((s) => !used.has(s));
+  ip.corps.push({ bizno: c.bizno, name: c.name || '', slot });
+  saveIpCorps();
+  return true;
+}
+
+function renderIpChips() {
+  $('#ipChips').innerHTML = ip.corps.length
+    ? ip.corps
+        .map(
+          (c) => `<span class="corp-chip">${swatch(c.slot)}${esc(c.name || fmtBizno(c.bizno))} <span class="muted small">${esc(fmtBizno(c.bizno))}</span>
+            <button class="x" data-bizno="${esc(c.bizno)}" title="빼기">×</button></span>`
+        )
+        .join('')
+    : '<span class="muted small">위 칸에서 업체를 찾아 추가하세요 (최대 10곳). 설정에 등록한 내 회사는 "내 회사 불러오기" 로 한 번에 넣을 수 있습니다.</span>';
+  $$('#ipChips .x').forEach((b) =>
+    b.addEventListener('click', () => {
+      ip.corps = ip.corps.filter((x) => x.bizno !== b.dataset.bizno);
+      saveIpCorps();
+      showIperf();
+    })
+  );
+}
+
+/** 업체명·사업자번호로 쇼핑몰 거래와 계약에서 함께 찾는다 — 한 곳이면 바로 넣고, 여럿이면 고르게 한다 */
+async function findIpCorp(term = $('#ipSearch').value.trim()) {
+  const pick = $('#ipPick');
+  if (!term) return (pick.innerHTML = '<div class="notice warn" style="margin-top:10px">업체명이나 사업자번호를 넣어 주세요.</div>');
+  const d = term.replace(/[^0-9]/g, '');
+  if (d.length === 10 && d.length === term.replace(/[-\s]/g, '').length) {
+    pick.innerHTML = '';
+    $('#ipSearch').value = '';
+    if (addIpCorp({ bizno: d, name: '' })) showIperf('auto');
+    return;
+  }
+  pick.innerHTML = '<div class="muted small" style="margin-top:10px">찾는 중…</div>';
+  const [shop, con] = await Promise.all([
+    api('/perf/corps?' + qs({ term, limit: 15 })).catch(() => []),
+    api('/contracts?' + qs({ corp: term, view: 'corp', top: 30 })).catch(() => ({ rows: [] })),
+  ]);
+  // 계약 쪽은 공동도급 구성원 이름에도 걸린다 — 주계약업체 이름에 든 쪽만
+  const norm = (v) => String(v || '').replace(/\s|\(주\)|㈜|주식회사/g, '').toLowerCase();
+  const byBiz = new Map();
+  for (const r of shop) byBiz.set(r.bizno, { bizno: r.bizno, name: r.name, shop: r.amt || 0, con: 0 });
+  for (const r of con.rows || []) {
+    if (!norm(r.label).includes(norm(term))) continue;
+    const x = byBiz.get(r.k) || byBiz.set(r.k, { bizno: r.k, name: r.label, shop: 0, con: 0 }).get(r.k);
+    x.con += r.amt || 0;
+    x.loc = r.loc;
+  }
+  const rows = [...byBiz.values()].sort((a, b) => b.shop + b.con - (a.shop + a.con));
+  if (rows.length === 1) {
+    pick.innerHTML = '';
+    $('#ipSearch').value = '';
+    if (addIpCorp(rows[0])) showIperf('auto');
+    return;
+  }
+  if (!rows.length) return (pick.innerHTML = `<div class="notice warn" style="margin-top:10px">"${esc(term)}" 업체를 쇼핑몰 거래와 계약에서 찾지 못했습니다.</div>`);
+  pick.innerHTML = `<div class="small muted" style="margin:10px 0 6px">${n(rows.length)}곳이 나왔습니다 — 줄을 눌러 추가하세요</div>
+    <div class="tablewrap"><table>${tableHtml(
+      [{ label: '업체' }, { label: '쇼핑몰 납품 (저장된 전체)', num: true }, { label: '계약 (최근 1년)', num: true }],
+      rows,
+      (r) => `<tr class="clickable" data-k="${esc(r.bizno)}">
+        <td>${esc(r.name)} <span class="muted small">${esc(fmtBizno(r.bizno))}</span>${r.loc ? ` <span class="loc small">${esc(r.loc)}</span>` : ''}</td>
+        <td class="num nowrap">${r.shop ? won(r.shop) : '-'}</td>
+        <td class="num nowrap">${r.con ? won(r.con) : '-'}</td>
+      </tr>`
+    )}</table></div>`;
+  $$('#ipPick tr[data-k]').forEach((tr) =>
+    tr.addEventListener('click', () => {
+      const r = rows.find((x) => x.bizno === tr.dataset.k);
+      pick.innerHTML = '';
+      $('#ipSearch').value = '';
+      if (addIpCorp(r)) showIperf('auto');
+    })
+  );
+}
+
+/** 통합 실적을 받아 그린다. fillMode: 쇼핑몰 빈 날짜 채우기 ('auto' 집계·업체 추가 / 'ask' 탭 열기 / null 안 함) */
+async function showIperf(fillMode = null) {
+  renderIpChips();
+  const seq = ++ip.seq;
+  const clear = (msg) => {
+    $('#ipSummary').innerHTML = '';
+    $('#ipNotes').innerHTML = '';
+    $('#ipLegend').innerHTML = '';
+    $('#ipTable').innerHTML = '';
+    $('#ipChart').innerHTML = `<div class="empty">${msg}</div>`;
+  };
+  if (!ip.corps.length) {
+    fillBanner('', '');
+    return clear('업체를 추가하면 쇼핑몰·물품·공사·용역 실적을 한데 모아 보여 줍니다.');
+  }
+  const q = { from: dateVal('#ipFrom'), to: dateVal('#ipTo'), years: [...ip.years].join(',') };
+  let d;
+  try {
+    d = await api('/integrated?' + qs({ ...q, biznos: ip.corps.map((c) => c.bizno).join(','), by: $('#ipPeriod').value }));
+  } catch (err) {
+    if (seq === ip.seq) clear(esc(err.message));
+    return;
+  }
+  if (seq !== ip.seq) return;
+  // 이름은 자료에서 — 사업자번호로만 넣은 업체도 이름이 붙는다
+  for (const c of ip.corps) c.name = d.corps.find((x) => x.bizno === c.bizno)?.name || c.name;
+  saveIpCorps();
+  renderIpChips();
+  ip.last = { d, q };
+  renderIpSummary(d);
+  // 업체가 한 곳이면 구분별로 나눠 보는 게 낫다 — 직접 고른 뒤에는 그대로 둔다
+  if (!ip.splitTouched) $('#ipSplit').value = ip.corps.length > 1 ? 'corp' : 'src';
+  renderIpPeriod();
+  if (fillMode) {
+    ensurePerfCoverage(fillMode, '', {
+      picked: ip.corps,
+      who: '추가한 업체',
+      auto: true,
+      scopeAll: false,
+      ...q,
+      rerun: () => showIperf(null),
+    });
+  }
+}
+
+/** 업체 × 구분 요약표 — 금액 큰 업체부터, 여러 곳이면 맨 아래 합계 */
+function renderIpSummary(d) {
+  const sum = (bizno, src) => d.rows.filter((r) => r.bizno === bizno && (!src || r.src === src)).reduce((a, r) => ({ amt: a.amt + r.amt, n: a.n + r.n }), { amt: 0, n: 0 });
+  const cell = (x) => `<td class="num">${x.amt ? `<div><b>${won(x.amt)}</b></div><div class="muted small">${n(x.n)}건</div>` : '<span class="muted">-</span>'}</td>`;
+  const mix = (parts, total) =>
+    total ? IP_SRC.map((s, i) => [s, parts[i].amt]).filter(([, a]) => a).map(([s, a]) => `${s} ${a / total < 0.01 ? '1% 미만' : Math.round((a / total) * 100) + '%'}`).join(' · ') : '';
+  const list = ip.corps
+    .map((c) => {
+      const parts = IP_SRC.map((s) => sum(c.bizno, s));
+      const total = sum(c.bizno);
+      return { c, parts, total };
+    })
+    .sort((a, b) => b.total.amt - a.total.amt);
+  const head = `<thead><tr><th>업체</th>${IP_SRC.map((s) => `<th class="num">${s}</th>`).join('')}<th class="num">합계</th></tr></thead>`;
+  const body = list
+    .map(
+      ({ c, parts, total }) => `<tr><td>${swatch(c.slot)}${esc(c.name || fmtBizno(c.bizno))} <span class="muted small">${esc(fmtBizno(c.bizno))}</span></td>
+        ${parts.map(cell).join('')}
+        <td class="num">${total.amt ? `<div><b>${won(total.amt)}</b></div><div class="muted small">${mix(parts, total.amt)}</div>` : '<span class="muted">-</span>'}</td></tr>`
+    )
+    .join('');
+  let foot = '';
+  if (list.length > 1) {
+    const anyOf = (src) => d.rows.filter((r) => !src || r.src === src).reduce((a, r) => ({ amt: a.amt + r.amt, n: a.n + r.n }), { amt: 0, n: 0 });
+    const parts = IP_SRC.map(anyOf);
+    const total = anyOf();
+    foot = `<tfoot><tr><td><b>합계</b></td>${parts.map(cell).join('')}<td class="num"><div><b>${won(total.amt)}</b></div><div class="muted small">${mix(parts, total.amt)}</div></td></tr></tfoot>`;
+  }
+  $('#ipSummary').innerHTML = head + `<tbody>${body}</tbody>` + foot;
+
+  const notes = [];
+  const ex = d.excluded.reduce((a, x) => ({ n: a.n + x.n, amt: a.amt + x.amt }), { n: 0, amt: 0 });
+  if (ex.n) notes.push(`물품 계약 가운데 쇼핑몰 단가계약 <b>${n(ex.n)}</b>건(계약정보의 예상 총액 ${won(ex.amt)}원)은 쇼핑몰 납품요구와 겹쳐 물품에서 뺐습니다.`);
+  if (dateVal('#ipFrom') < daysAgo(365).replace(/-/g, '')) notes.push('물품·공사·용역 계약은 최근 1년 동안 등록·변경된 것만 받아 두어, 그 이전 기간은 대부분 쇼핑몰만 들어 있습니다.');
+  $('#ipNotes').innerHTML = notes.map((t) => `<div class="notice" style="margin-top:10px">${t}</div>`).join('');
+}
+
+/** 기간 칸 — 시작일~종료일의 모든 달(분기·해)을 빈 칸까지 채우고, 연도를 골랐으면 그 해만 */
+function ipBuckets(by, from, to) {
+  let cats = monthsBetween(from, to);
+  if (ip.years.size) cats = cats.filter((m) => ip.years.has(m.slice(0, 4)));
+  if (by === 'quarter') cats = [...new Set(cats.map((m) => `${m.slice(0, 4)}Q${Math.ceil(Number(m.slice(4, 6)) / 3)}`))];
+  if (by === 'year') cats = [...new Set(cats.map((m) => m.slice(0, 4)))];
+  return cats;
+}
+
+/** 기간별 막대 — 업체별(업체마다 네 구분 합) 또는 구분별(고른 업체 모두의 합) */
+function renderIpPeriod() {
+  if (!ip.last) return;
+  const { d, q } = ip.last;
+  const by = d.by;
+  const cats = ipBuckets(by, q.from, q.to);
+  const idx = new Map(cats.map((c, i) => [c, i]));
+  const split = $('#ipSplit').value;
+  const groups = split === 'src' ? IP_SRC.map((s, i) => ({ key: s, name: s, slot: i + 1 })) : ip.corps.map((c) => ({ key: c.bizno, name: c.name || fmtBizno(c.bizno), slot: c.slot }));
+  const series = groups.map((g) => {
+    const values = cats.map(() => 0);
+    const counts = cats.map(() => 0);
+    for (const r of d.rows) {
+      if ((split === 'src' ? r.src : r.bizno) !== g.key) continue;
+      const i = idx.get(r.bucket);
+      if (i === undefined) continue;
+      values[i] += r.amt;
+      counts[i] += r.n;
+    }
+    return { ...g, values, counts };
+  });
+  vizLegend('#ipLegend', series);
+  verticalBars($('#ipChart'), cats, series, by);
+  const head = by === 'year' ? '연도' : by === 'quarter' ? '분기' : '월';
+  $('#ipTable').innerHTML =
+    `<thead><tr><th>${head}</th>${series.map((s) => `<th class="num">${swatch(s.slot)}${esc(s.name)}</th>`).join('')}<th class="num">합계</th></tr></thead><tbody>` +
+    cats
+      .map((c, ci) => {
+        const total = series.reduce((a, s) => a + s.values[ci], 0);
+        return `<tr><td>${esc(fmtBucketLabel(by, c))}</td>${series
+          .map((s) => `<td class="num nowrap">${s.values[ci] ? `${n(s.values[ci])} <span class="muted small">${n(s.counts[ci])}건</span>` : '-'}</td>`)
+          .join('')}<td class="num nowrap"><b>${total ? n(total) : '-'}</b></td></tr>`;
+      })
+      .join('') +
+    '</tbody>';
+}
+
+function initIperf() {
+  $('#ipFrom').value = daysAgo(365);
+  $('#ipTo').value = daysAgo(0);
+  try {
+    ip.corps = JSON.parse(localStorage.getItem('ipCorps') || '[]').filter((c) => c?.bizno).slice(0, PERF_CORPS_MAX);
+  } catch {}
+  const years = yearPicker({
+    btn: '#ipYearBtn',
+    pop: '#ipYearPop',
+    from: '#ipFrom',
+    to: '#ipTo',
+    key: 'ipYears',
+    max: () => daysAgo(0),
+    onChange: () => showIperf('auto'),
+  });
+  ip.years = years.years;
+  // 쇼핑몰은 2017년부터, 계약은 옛 변경계약까지 — 두 쪽의 해를 합친다
+  Promise.all([api('/perf/years').catch(() => []), api('/contracts/years').catch(() => [])]).then(([a, b]) =>
+    years.setList([...new Set([...a, ...b].map(String))].sort().reverse())
+  );
+  $('#ipAdd').addEventListener('click', () => findIpCorp());
+  $('#ipSearch').addEventListener('keydown', (e) => e.key === 'Enter' && findIpCorp());
+  $('#ipRun').addEventListener('click', () => showIperf('auto'));
+  for (const id of ['#ipFrom', '#ipTo', '#ipPeriod']) $(id).addEventListener('change', () => showIperf(id === '#ipPeriod' ? null : 'auto'));
+  $('#ipSplit').addEventListener('change', () => {
+    ip.splitTouched = true;
+    renderIpPeriod();
+  });
+  $('#ipMine').addEventListener('click', () => {
+    const mine = (state.settings.myCorps || []).filter((c) => c.bizno);
+    if (!mine.length) return alert('수집 · 설정 → 설정에서 사업자등록번호와 함께 내 회사를 먼저 등록해 주세요.');
+    let added = false;
+    for (const c of mine) added = addIpCorp({ bizno: c.bizno.replace(/[^0-9]/g, ''), name: c.name }) || added;
+    if (added) showIperf('auto');
+  });
+}
+
 /* ── 물품비교 (관심목록 탭에서 체크한 물품의 비교표) ─────────────── */
 
 const CMP_MAX = 8;
@@ -3593,18 +3859,29 @@ async function bindMarks(scope) {
  * 한도를 넘거나 'ask' 면 버튼으로 묻는다.
  * 세부품명으로 좁혀 받으므로 그 품목의 다른 업체 거래도 같이 저장된다 (경쟁 비교에도 쓰임).
  */
-async function ensurePerfCoverage(mode, lead = '') {
-  if (perf.filling) return;
-  // 채울 업체: 추가한 업체. 없으면 '전체 품목' 으로 볼 때 조건으로 고른 업체 (금액 큰 순으로 PERF_CORPS_MAX 곳까지)
+/** 업체 실적 탭의 채우기 대상 — 추가한 업체. 없으면 '전체 품목' 으로 볼 때 조건으로 고른 업체 (금액 큰 순으로 PERF_CORPS_MAX 곳까지) */
+function perfFillCtx() {
   const picked = perf.corps.length ? perf.corps : perf.scopeAll ? perf.view.slice(0, PERF_CORPS_MAX) : [];
+  return {
+    picked,
+    who: perf.corps.length ? '추가한 업체' : perf.view.length > picked.length ? `상위 ${n(picked.length)}곳` : '보이는 업체',
+    // 조건으로 고른 업체는 여러 곳이라 저절로 받지 않고 예상 호출 수를 보여 준 뒤 묻는다
+    auto: perf.corps.length > 0,
+    scopeAll: perf.scopeAll,
+    from: dateVal('#mFrom'),
+    to: dateVal('#mTo'),
+    years: [...perf.years].join(','),
+    rerun: () => loadPerf(null),
+  };
+}
+
+async function ensurePerfCoverage(mode, lead = '', ctx = perfFillCtx()) {
+  if (perf.filling) return;
+  const { picked, who, from, to } = ctx;
   if (!picked.length) return fillBanner('', '');
-  const who = perf.corps.length ? '추가한 업체' : perf.view.length > picked.length ? `상위 ${n(picked.length)}곳` : '보이는 업체';
   const whoGa = who + (who.endsWith('곳') ? '이' : '가');
-  // 조건으로 고른 업체는 여러 곳이라 저절로 받지 않고 예상 호출 수를 보여 준 뒤 묻는다
-  if (!perf.corps.length && mode === 'auto') mode = 'ask';
+  if (!ctx.auto && mode === 'auto') mode = 'ask';
   const banner = (kind, html) => fillBanner(kind, (lead ? lead + '<br>' : '') + html);
-  const from = dateVal('#mFrom').replace(/-/g, '');
-  const to = dateVal('#mTo').replace(/-/g, '');
   if (from.length !== 8 || to.length !== 8) return;
   let plan;
   try {
@@ -3612,10 +3889,10 @@ async function ensurePerfCoverage(mode, lead = '') {
       '/perf/fillplan?' +
         qs({
           biznos: picked.map((c) => c.bizno).join(','),
-          corps: perf.scopeAll ? JSON.stringify(picked.map(({ bizno, name }) => ({ bizno, name }))) : '',
+          corps: ctx.scopeAll ? JSON.stringify(picked.map(({ bizno, name }) => ({ bizno, name }))) : '',
           from,
           to,
-          years: [...perf.years].join(','),
+          years: ctx.years,
         })
     );
   } catch {
@@ -3627,13 +3904,13 @@ async function ensurePerfCoverage(mode, lead = '') {
   // 전체 품목 — 업체 단위로 등록품목을 받아 본 적 없는 업체는, 등록했지만 거래내역을 안 받은 세부품명이 더 있을 수 있다
   const unknown = plan.unknown || [];
   const skipKey = unknown.map((c) => c.bizno).join(',');
-  if (perf.scopeAll && unknown.length && perf.skipUnknown !== skipKey) return askCorpListings(unknown, who, names, mode, skipKey);
+  if (ctx.scopeAll && unknown.length && perf.skipUnknown !== skipKey) return askCorpListings(unknown, who, names, mode, skipKey);
 
   if (!plan.dtils.length) {
     return banner(
       '',
       `<span class="small">${who}의 저장된 등록품목이 이 기간에 없어 거래내역을 채울 세부품명이 없습니다.` +
-        ` 업체 추가 칸에 이름을 넣고 <b>조달청에서 가져오기</b>로 등록품목을 받으면 그 세부품명의 거래내역을 채웁니다.</span>`
+        ` 업체 실적 탭의 업체 추가 칸에 이름을 넣고 <b>조달청에서 가져오기</b>로 등록품목을 받으면 그 세부품명의 거래내역을 채웁니다.</span>`
     );
   }
   const jobs = plan.jobs;
@@ -3733,7 +4010,7 @@ async function ensurePerfCoverage(mode, lead = '') {
       perf.filling = false;
     }
     // 다시 그린 뒤 결과를 띄운다
-    await loadPerf(null);
+    await ctx.rerun();
     refreshMeta();
     const done = `세부품명 거래내역 ${n(sum.fetched)}건을 받아 채웠습니다 (API ${n(sum.calls)}회)`;
     fillBanner(
