@@ -1976,6 +1976,7 @@ function contractQuery() {
     amtMin: $('#ctAmtMin').value,
     amtMax: $('#ctAmtMax').value,
     sort: $('#ctSort').value,
+    unit: $('#ctUnit').checked ? 'only' : '',
   };
 }
 
@@ -2198,6 +2199,7 @@ function initContracts() {
   });
   $('#ctReset').addEventListener('click', () => {
     for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax', '#ctMethod']) $(id).value = '';
+    $('#ctUnit').checked = false;
     resetDates();
     searchContracts(1);
   });
@@ -2282,7 +2284,7 @@ async function showCperf() {
   if (!el.innerHTML) el.innerHTML = '<div class="card"><div class="empty">정리하는 중…</div></div>';
   let r;
   try {
-    const [list, month, instt, clsfc, method, kind, part] = await Promise.all([
+    const [list, month, instt, clsfc, method, kind, part, unit] = await Promise.all([
       get({ page: cp.page, size: cp.size }),
       get({ view: 'month', top: 200 }),
       get({ view: 'instt', top: 20 }),
@@ -2290,8 +2292,9 @@ async function showCperf() {
       get({ view: 'method', top: 50 }),
       multiKind ? get({ view: 'kind', top: 10 }) : null,
       api('/contracts?' + qs({ ...cpQuery(), corpPart: c.bizno, size: 1 })),
+      base.kind.split(',').some((k) => k === '물품' || k === '용역') || !base.kind ? get({ unit: 'only', size: 1 }) : null,
     ]);
-    r = { list, month, instt, clsfc, method, kind, part };
+    r = { list, month, instt, clsfc, method, kind, part, unit };
   } catch (err) {
     if (seq === cp.seq) el.innerHTML = `<div class="card"><div class="notice warn">${esc(err.message)}</div></div>`;
     return;
@@ -2301,6 +2304,9 @@ async function showCperf() {
   const sui = month.rows.reduce((a, x) => a + x.sui, 0);
   const partNote = r.part.total
     ? `<div class="notice" style="margin-top:10px">지분을 모르는 공동도급 계약이 <b>${n(r.part.total)}</b>건 더 있습니다 (계약 전체 금액 ${won(r.part.amt)}원). API 로만 받은 계약이라 위 실적에는 넣지 않았습니다 — 조달데이터허브 계약 내역 파일로 그 기간을 넣으면 지분만큼 더해집니다.</div>`
+    : '';
+  const unitNote = r.unit?.total
+    ? `<div class="notice" style="margin-top:10px">쇼핑몰 단가계약(제3자단가·다수공급자·일반단가) <b>${n(r.unit.total)}</b>건(계약정보의 예상 총액 ${won(r.unit.amt)}원)은 실적이 아니라 뺐습니다 — 실제 판매는 쇼핑몰 업체 실적에 있습니다.</div>`
     : '';
   const side = (id, title, d, cls = '') =>
     `<div class="card ${cls}"><h2>${title}${d.groups > d.rows.length ? ` <span class="small muted">${n(d.groups)}곳 가운데 금액 큰 ${n(d.rows.length)}곳</span>` : ''}</h2><div class="tablewrap"><table id="${id}"></table></div></div>`;
@@ -2317,7 +2323,7 @@ async function showCperf() {
         { k: '계약기관', v: n(r.instt.groups), u: '곳' },
         { k: '평균 계약금액', v: won(list.total ? list.amt / list.total : 0), u: '원' },
       ])}</div>
-      ${partNote}
+      ${partNote}${unitNote}
     </div>
     ${list.total ? `
     <div class="card">
@@ -2632,7 +2638,7 @@ function renderIpSummary(d) {
 
   const notes = [];
   const ex = d.excluded.reduce((a, x) => ({ n: a.n + x.n, amt: a.amt + x.amt }), { n: 0, amt: 0 });
-  if (ex.n) notes.push(`물품 계약 가운데 쇼핑몰 단가계약 <b>${n(ex.n)}</b>건(계약정보의 예상 총액 ${won(ex.amt)}원)은 쇼핑몰 납품요구와 겹쳐 물품에서 뺐습니다.`);
+  if (ex.n) notes.push(`쇼핑몰 단가계약(제3자단가·다수공급자·일반단가 등) <b>${n(ex.n)}</b>건(계약정보의 예상 총액 ${won(ex.amt)}원)은 실적이 아니라 뺐습니다 — 실제 판매는 쇼핑몰 납품요구로 들어가 있습니다.`);
   if (dateVal('#ipFrom') < daysAgo(365).replace(/-/g, '')) notes.push('물품·공사·용역 계약은 최근 1년 동안 등록·변경된 것만 받아 두어, 그 이전 기간은 대부분 쇼핑몰만 들어 있습니다.');
   $('#ipNotes').innerHTML = notes.map((t) => `<div class="notice" style="margin-top:10px">${t}</div>`).join('');
 }
