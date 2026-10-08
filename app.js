@@ -15,7 +15,8 @@ function won(v) {
   const x = Number(v || 0);
   if (x >= 1e12) {
     const eok = Math.round(x / 1e8);
-    return `${Math.floor(eok / 1e4).toLocaleString('ko-KR')}조 ${(eok % 1e4).toLocaleString('ko-KR')}억`;
+    const jo = `${Math.floor(eok / 1e4).toLocaleString('ko-KR')}조`;
+    return eok % 1e4 ? `${jo} ${(eok % 1e4).toLocaleString('ko-KR')}억` : jo; // 1조 0억 → 1조 (그래프 눈금)
   }
   if (x >= 1e8) return (x / 1e8).toFixed(x >= 1e9 ? 0 : 1) + '억';
   if (x >= 1e4) return Math.round(x / 1e4).toLocaleString('ko-KR') + '만';
@@ -2039,7 +2040,7 @@ const kindPill = (k) => (k === '외자' ? `<div><span class="pill">${esc(k)}</sp
 const CT_CLICK = { corp: true, instt: '#ctInstt', corpSido: '#ctCorpLoc', corpLoc: '#ctCorpLoc' };
 
 const CT_GROUP_HEAD = {
-  corp: '업체', corpSido: '업체소재 시·도', corpLoc: '업체소재지', instt: '계약기관', insttDiv: '기관구분', month: '월', clsfc: '공종·업종', method: '계약방법', kind: '구분',
+  corp: '업체', corpSido: '업체소재 시·도', corpLoc: '업체소재지', instt: '계약기관', insttDiv: '기관구분', month: '월', quarter: '분기', year: '연도', clsfc: '공종·업종', method: '계약방법', kind: '구분',
 };
 
 async function searchContracts(page = 1) {
@@ -2101,7 +2102,8 @@ async function searchContracts(page = 1) {
 /** 묶어 보기 표. clickable 이면 줄에 data-k (누르면 그 조건으로 좁힌다) */
 function contractGroupHtml(view, data, clickable) {
   const total = data.amt || 1;
-  const label = (r) => (view === 'month' ? `${String(r.label).slice(0, 4)}-${String(r.label).slice(4)}` : r.label || '(없음)');
+  const label = (r) =>
+    view === 'month' ? `${String(r.label).slice(0, 4)}-${String(r.label).slice(4)}` : view === 'quarter' || view === 'year' ? fmtBucketLabel(view, String(r.label)) : r.label || '(없음)';
   return tableHtml(
     [
       { label: CT_GROUP_HEAD[view] },
@@ -2187,8 +2189,8 @@ function initContracts() {
 
 /* ── 업체 계약 실적 (관리자 PC 만 — 받아 둔 계약 내역으로, API 호출 없음) ──────── */
 
-/** corp: 고른 업체 {bizno, name, loc} — 이 PC 브라우저에 기억 */
-const cp = { corp: null, page: 1, size: 20, seq: 0 };
+/** corp: 고른 업체 {bizno, name, loc} — 이 PC 브라우저에 기억. by: 기간별 계약금액 묶음 (월·분기·연도) */
+const cp = { corp: null, page: 1, size: 20, seq: 0, by: 'month' };
 
 const cpQuery = () => ({
   kind: bizKinds(),
@@ -2298,7 +2300,14 @@ async function showCperf() {
     </div>
     ${list.total ? `
     <div class="card">
-      <h2>월별 계약금액</h2>
+      <div class="card-head">
+        <h2>기간별 계약금액</h2>
+        <select id="cpPeriod">
+          <option value="year">연도별</option>
+          <option value="quarter">분기별</option>
+          <option value="month">월별</option>
+        </select>
+      </div>
       <div class="viz" id="cpChart"></div>
       <details class="viz-table"><summary>표로 보기</summary><div class="tablewrap"><table id="cpMonth"></table></div></details>
     </div>
@@ -2326,11 +2335,14 @@ async function showCperf() {
     searchContracts(1);
   });
   if (!list.total) return;
-  // 월별 — 빈 달도 0 으로 채워 기간 전체를 그린다
-  const amtOf = new Map(month.rows.map((x) => [x.k, x.amt]));
-  const cats = monthsBetween(dateVal('#cpFrom') || month.rows.at(-1)?.k, dateVal('#cpTo') || month.rows[0]?.k);
-  verticalBars($('#cpChart'), cats, [{ slot: 1, name: '계약금액', values: cats.map((m) => amtOf.get(m) || 0) }], 'month');
-  $('#cpMonth').innerHTML = contractGroupHtml('month', month, false);
+  cp.month = month;
+  $('#cpPeriod').value = cp.by;
+  $('#cpPeriod').addEventListener('change', () => {
+    cp.by = $('#cpPeriod').value;
+    try { localStorage.setItem('cpBy', cp.by); } catch {}
+    renderCpPeriod();
+  });
+  renderCpPeriod();
   $('#cpInstt').innerHTML = contractGroupHtml('instt', r.instt, false);
   $('#cpClsfc').innerHTML = contractGroupHtml('clsfc', r.clsfc, false);
   $('#cpMethodT').innerHTML = contractGroupHtml('method', r.method, false);
@@ -2340,6 +2352,25 @@ async function showCperf() {
     cp.page = p;
     showCperf();
   });
+}
+
+/** 기간별 계약금액 — 서버의 월별 묶음을 분기·연도로 합쳐 그린다 (빈 칸도 0 으로 채워 기간 전체를) */
+function renderCpPeriod() {
+  const month = cp.month;
+  const by = cp.by;
+  const keyOf = (m) => (by === 'year' ? m.slice(0, 4) : by === 'quarter' ? `${m.slice(0, 4)}Q${Math.ceil(Number(m.slice(4, 6)) / 3)}` : m);
+  const groups = new Map();
+  for (const x of month.rows) {
+    const k = keyOf(String(x.k));
+    const g = groups.get(k) || groups.set(k, { k, label: k, n: 0, amt: 0, sui: 0 }).get(k);
+    g.n += x.n;
+    g.amt += x.amt;
+    g.sui += x.sui;
+  }
+  const cats = periodCats(by, dateVal('#cpFrom') || month.rows.at(-1)?.k, dateVal('#cpTo') || month.rows[0]?.k, cp.years);
+  verticalBars($('#cpChart'), cats, [{ slot: 1, name: '계약금액', values: cats.map((c) => groups.get(c)?.amt || 0) }], by);
+  const rows = [...groups.values()].sort((a, b) => (a.k < b.k ? 1 : -1));
+  $('#cpMonth').innerHTML = contractGroupHtml(by, { rows, amt: month.amt }, false);
 }
 
 /** '20251008' … '20261008' → ['202510', …, '202610'] */
@@ -2359,6 +2390,10 @@ function monthsBetween(from, to) {
 }
 
 function initCperf() {
+  try {
+    const by = localStorage.getItem('cpBy');
+    if (['month', 'quarter', 'year'].includes(by)) cp.by = by;
+  } catch {}
   $('#cpFrom').value = daysAgo(365);
   $('#cpTo').value = daysAgo(0);
   const years = yearPicker({
@@ -2581,10 +2616,10 @@ function renderIpSummary(d) {
   $('#ipNotes').innerHTML = notes.map((t) => `<div class="notice" style="margin-top:10px">${t}</div>`).join('');
 }
 
-/** 기간 칸 — 시작일~종료일의 모든 달(분기·해)을 빈 칸까지 채우고, 연도를 골랐으면 그 해만 */
-function ipBuckets(by, from, to) {
+/** 기간 칸 — 시작일~종료일의 모든 달(분기·해)을 빈 칸까지 채우고, 연도(Set)를 골랐으면 그 해만 (계약 실적·통합 실적) */
+function periodCats(by, from, to, years) {
   let cats = monthsBetween(from, to);
-  if (ip.years.size) cats = cats.filter((m) => ip.years.has(m.slice(0, 4)));
+  if (years?.size) cats = cats.filter((m) => years.has(m.slice(0, 4)));
   if (by === 'quarter') cats = [...new Set(cats.map((m) => `${m.slice(0, 4)}Q${Math.ceil(Number(m.slice(4, 6)) / 3)}`))];
   if (by === 'year') cats = [...new Set(cats.map((m) => m.slice(0, 4)))];
   return cats;
@@ -2595,7 +2630,7 @@ function renderIpPeriod() {
   if (!ip.last) return;
   const { d, q } = ip.last;
   const by = d.by;
-  const cats = ipBuckets(by, q.from, q.to);
+  const cats = periodCats(by, q.from, q.to, ip.years);
   const idx = new Map(cats.map((c, i) => [c, i]));
   const split = $('#ipSplit').value;
   const groups = split === 'src' ? IP_SRC.map((s, i) => ({ key: s, name: s, slot: i + 1 })) : ip.corps.map((c) => ({ key: c.bizno, name: c.name || fmtBizno(c.bizno), slot: c.slot }));
