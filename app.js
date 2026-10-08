@@ -335,51 +335,96 @@ function lastSub(group) {
 
 /* ── 업무 구분 (G2B Finder 옆 드롭다운) — 관리자 PC 만. 동료 PC·휴대폰은 늘 물품 ── */
 
+/** 계약 묶음 — 계약 내역·계약 실적 탭은 하나씩이고, 어느 묶음에서 눌렀는지(state.ckind)로 구분을 정한다 */
+const CKINDS = {
+  물품: { kinds: '물품,외자', cls: 'g-thng', what: '물품·외자' },
+  공사: { kinds: '공사', cls: 'g-cnstwk', what: '공사' },
+  용역: { kinds: '용역', cls: 'g-servc', what: '용역' },
+};
+const SHOP_TABS = [['orders', '거래내역'], ['products', '등록품목'], ['mine', '업체 실적'], ['marks', '관심목록'], ['compare', '물품비교']];
 const BIZ = {
-  물품: { kinds: '물품,외자', sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역) · 물품 계약', tabs: ['orders', 'products', 'mine', 'marks', 'compare', 'contracts', 'cperf', 'manage'] },
-  공사: { kinds: '공사', sub: '나라장터 공사 계약 내역 · 업체 계약 실적', tabs: ['contracts', 'cperf', 'manage'] },
-  용역: { kinds: '용역', sub: '나라장터 용역 계약 내역 · 업체 계약 실적', tabs: ['contracts', 'cperf', 'manage'] },
-  전체: { kinds: '', sub: '나라장터 쇼핑몰 · 공사·용역·물품 계약 내역', tabs: ['orders', 'products', 'contracts', 'mine', 'cperf', 'marks', 'compare', 'manage'] },
+  물품: { shop: true, ck: ['물품'], sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역) · 물품 계약' },
+  공사: { shop: false, ck: ['공사'], sub: '나라장터 공사 계약 내역 · 업체 계약 실적' },
+  용역: { shop: false, ck: ['용역'], sub: '나라장터 용역 계약 내역 · 업체 계약 실적' },
+  전체: { shop: true, ck: ['물품', '공사', '용역'], sub: '나라장터 쇼핑몰 · 물품·공사·용역 계약' },
 };
 const bizNow = () => (state.viewer ? '물품' : BIZ[state.biz] ? state.biz : '물품');
-/** 계약 검색에 쓸 구분 ('공사', '물품,외자' …). 전체면 '' — 계약 내역 탭의 '구분' 칸을 따른다 */
-const bizKinds = () => BIZ[bizNow()].kinds;
+/** 지금 보는 계약 묶음 — 전체에서는 마지막으로 누른 묶음 */
+const ckNow = () => (BIZ[bizNow()].ck.includes(state.ckind) ? state.ckind : BIZ[bizNow()].ck[0]);
+/** 계약 검색에 쓸 구분 ('공사', '물품,외자' …) */
+const bizKinds = () => CKINDS[ckNow()].kinds;
+/** 이 구분에서 열 수 있는 탭 (수집 · 설정은 늘) */
+const bizTabs = () => [...(BIZ[bizNow()].shop ? SHOP_TABS.map(([t]) => t) : []), 'contracts', 'cperf', 'manage'];
 
-/** 고른 구분에 맞게 메뉴·제목·계약 검색 칸을 바꾼다 */
+/** 메뉴 줄의 묶음을 그린다 — 쇼핑몰, 그리고 구분마다 계약 묶음 (동료 PC 는 쇼핑몰만, 이름표 없이) */
+function renderNav() {
+  const conf = BIZ[bizNow()];
+  const groups = [];
+  if (conf.shop) groups.push({ label: '쇼핑몰', cls: 'g-shop', tabs: SHOP_TABS });
+  // 공사·용역만 볼 때는 업체 실적 자리가 계약 실적 — 쇼핑몰 업체 실적과 나란히 있을 때만 '계약 실적'
+  const perf = conf.shop ? '계약 실적' : '업체 실적';
+  if (!state.viewer) {
+    for (const k of conf.ck) groups.push({ label: `${k} 계약`, cls: CKINDS[k].cls, kind: k, tabs: [['contracts', '계약 내역'], ['cperf', perf]] });
+  }
+  $('#navGroups').innerHTML = groups
+    .map(
+      (g, i) =>
+        (i ? '<span class="navsep"></span>' : '') +
+        (g.kind || groups.length > 1 ? `<span class="navgroup ${g.cls}">${g.label}</span>` : '') +
+        g.tabs.map(([t, l]) => `<button data-tab="${t}" class="${g.cls}"${g.kind ? ` data-kind="${g.kind}"` : ''}>${l}</button>`).join('')
+    )
+    .join('');
+  $$('#navGroups button').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (b.dataset.kind) setCkind(b.dataset.kind);
+      showTab(b.dataset.tab);
+    })
+  );
+}
+
+/** 고른 구분에 맞게 메뉴·제목을 바꾼다 */
 function applyBiz() {
   const b = bizNow();
-  const conf = BIZ[b];
   $('#bizSel').value = b;
-  if (!state.viewer) $('#bizSub').textContent = conf.sub;
-  $$('nav button').forEach((btn) => (btn.hidden = !conf.tabs.includes(btn.dataset.tab)));
-  // 공사·용역에서는 업체 실적 자리가 계약 실적 — 전체에서는 쇼핑몰 업체 실적과 나란히 둔다
-  $('nav button[data-tab="cperf"]').textContent = conf.tabs.includes('mine') ? '계약 실적' : '업체 실적';
-  // 묶음 이름·구분선은 쇼핑몰과 계약 묶음이 둘 다 보일 때만 (공사·용역·동료 PC 는 하나뿐)
-  const shown = (g) => $$(`nav button.${g}`).some((btn) => !btn.hidden && !(state.viewer && btn.classList.contains('admin-only')));
-  const both = shown('g-shop') && shown('g-cntrct');
-  for (const id of ['#navShop', '#navSep', '#navCntrct']) $(id).hidden = !both;
-  $('#navCntrct').textContent = b === '물품' ? '물품 계약' : '계약';
-  $('#ctKindBox').hidden = b !== '전체';
-  const multiKind = !conf.kinds || conf.kinds.includes(',');
+  if (!state.viewer) $('#bizSub').textContent = BIZ[b].sub;
+  renderNav();
+  applyCkind();
+}
+
+/** 계약 묶음에 맞게 계약 내역·계약 실적의 제목과 칸을 바꾼다 */
+function applyCkind() {
+  const c = CKINDS[ckNow()];
+  $('#ctKindBox').hidden = true;
+  const multiKind = c.kinds.includes(','); // 물품은 물품·외자 둘이라 구분별 보기가 뜻이 있다
   $('#ctView option[value="kind"]').hidden = !multiKind;
   if (!multiKind && ctView() === 'kind') $('#ctView').value = 'list';
   applyContractView();
-  const what = b === '전체' ? '공사·용역·물품' : b === '물품' ? '물품·외자' : b;
-  $('#ctTitleNote').textContent = `(${what} · 수의계약·경쟁 모두)`;
-  $('#cpTitleNote').textContent = `(${what})`;
+  $('#ctTitleNote').textContent = `(${c.what} · 수의계약·경쟁 모두)`;
+  $('#cpTitleNote').textContent = `(${c.what})`;
+}
+
+/** 계약 묶음을 바꾼다 (전체에서 다른 묶음의 탭을 눌렀을 때) */
+function setCkind(k) {
+  if (ckNow() === k) return;
+  state.ckind = k;
+  try { localStorage.setItem('ckind', k); } catch {}
+  ct.searched = false; // 계약 내역은 새 구분으로 다시 찾는다
+  cp.page = 1;
+  applyCkind();
 }
 
 function setBiz(b) {
+  const before = ckNow();
   state.biz = b;
   try { localStorage.setItem('biz', b); } catch {}
   applyBiz();
-  ct.searched = false; // 계약 내역은 다음에 열 때 새 구분으로 다시 찾는다
+  if (ckNow() !== before) ct.searched = false; // 계약 내역은 다음에 열 때 새 구분으로 다시 찾는다
   showTab(location.hash.slice(1) || 'home');
 }
 
 function showTab(name) {
   if (state.viewer && ['home', 'settings', 'manage', 'contracts', 'cperf'].includes(name)) name = 'orders'; // 검색 전용은 수집·설정·계약 내역이 없다
-  const tabs = BIZ[bizNow()].tabs;
+  const tabs = bizTabs();
   if (!tabs.includes(TAB_GROUPS[name] ? name : groupOf(name)) && $('#tab-' + name)) {
     // 이 구분에 없는 메뉴 — 업체 실적은 짝(쇼핑몰 ↔ 계약)으로, 나머지는 첫 메뉴로
     name = name === 'mine' && tabs.includes('cperf') ? 'cperf' : name === 'cperf' && tabs.includes('mine') ? 'mine' : tabs[0];
@@ -387,7 +432,8 @@ function showTab(name) {
   if (TAB_GROUPS[name]) name = lastSub(name);
   if (!$('#tab-' + name)) name = 'home';
   const group = groupOf(name);
-  $$('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === group));
+  // 계약 탭은 묶음마다 하나씩이라 지금 묶음의 것만 켠다
+  $$('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === group && (!b.dataset.kind || b.dataset.kind === ckNow())));
 
   const subs = TAB_GROUPS[group];
   const bar = $('#subnav');
@@ -413,7 +459,7 @@ async function boot() {
   $('#quitBtn').addEventListener('click', quitApp);
   applyTheme(localStorage.getItem('theme') || 'light');
 
-  $$('nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  $('nav button[data-tab="manage"]').addEventListener('click', () => showTab('manage')); // 나머지 탭은 renderNav 가 묶음마다 단다
 
   // 기본 기간: 최근 30일
   ['#colFrom', '#oFrom'].forEach((id) => ($(id).value = daysAgo(30)));
@@ -549,7 +595,10 @@ async function boot() {
 
   await initMode();
   if (!state.viewer) {
-    try { state.biz = localStorage.getItem('biz'); } catch {}
+    try {
+      state.biz = localStorage.getItem('biz');
+      state.ckind = localStorage.getItem('ckind');
+    } catch {}
     $('#bizSel').addEventListener('change', (e) => setBiz(e.target.value));
   }
   applyBiz();
@@ -1971,8 +2020,8 @@ function applyContractView() {
         : '금액이 큰 순서';
 }
 
-/** 줄마다 구분 표시 — 구분이 하나로 정해진 화면에서는 모두 같은 글자라 뺀다 (물품은 외자만 표시) */
-const kindPill = (k) => (bizNow() === '전체' || (bizNow() === '물품' && k === '외자') ? `<div><span class="pill">${esc(k)}</span></div>` : '');
+/** 줄마다 구분 표시 — 계약 묶음마다 구분이 정해져 모두 같은 글자라 빼고, 물품 계약에 섞인 외자만 표시한다 */
+const kindPill = (k) => (k === '외자' ? `<div><span class="pill">${esc(k)}</span></div>` : '');
 
 /** 묶어 보기에서 줄을 누르면 채울 칸 (업체별은 칸을 채우지 않고 계약 실적을 연다) */
 const CT_CLICK = { corp: true, instt: '#ctInstt', corpSido: '#ctCorpLoc', corpLoc: '#ctCorpLoc' };

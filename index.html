@@ -33,18 +33,9 @@
   </div>
 </header>
 
-<!-- 탭은 묶음(쇼핑몰 / 계약)으로 나눠 묶음 이름·색으로 구분한다. 묶음이 하나뿐이면 이름은 숨긴다 (applyBiz) -->
+<!-- 탭은 묶음(쇼핑몰 / 물품·공사·용역 계약)으로 나눠 묶음 이름·색으로 구분한다. 묶음은 업무 구분에 따라 그린다 (renderNav) -->
 <nav>
-  <span class="navgroup g-shop" id="navShop">쇼핑몰</span>
-  <button data-tab="orders" class="g-shop">거래내역</button>
-  <button data-tab="products" class="g-shop">등록품목</button>
-  <button data-tab="mine" class="g-shop">업체 실적</button>
-  <button data-tab="marks" class="g-shop">관심목록</button>
-  <button data-tab="compare" class="g-shop">물품비교</button>
-  <span class="navsep admin-only" id="navSep"></span>
-  <span class="navgroup g-cntrct admin-only" id="navCntrct">물품 계약</span>
-  <button data-tab="contracts" class="g-cntrct admin-only">계약 내역</button>
-  <button data-tab="cperf" class="g-cntrct admin-only" hidden>계약 실적</button>
+  <span id="navGroups" style="display: contents"></span>
   <span class="navspace"></span>
   <button data-tab="manage" class="on admin-only">수집 · 설정</button>
 </nav>
