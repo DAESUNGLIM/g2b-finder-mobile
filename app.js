@@ -2169,7 +2169,11 @@ function contractListHtml(rows, { corp = true } = {}) {
       <td class="num nowrap">${
         r.share_rate != null
           ? `<b title="이 업체 몫 ${n(Math.round(r.share_amt))}원">${won(r.share_amt)}</b><div class="muted small">지분 ${r.amt ? Math.round((r.share_amt / r.amt) * 1000) / 10 : 0}% · 계약 ${won(r.amt)}</div>`
-          : `<b title="${n(r.amt)}원">${won(r.amt)}</b>${r.thtm_amt && r.thtm_amt !== r.amt ? `<div class="muted small">금차 ${won(r.thtm_amt)}</div>` : ''}`
+          : `<b title="${n(r.amt)}원">${won(r.amt)}</b>${
+              r.tot_amt > r.amt
+                ? `<div class="muted small" title="장기계속 계약은 차수마다 공사 전체 금액이 붙어 있어, 합계에는 이 차수 금액(금차)만 셉니다">총 ${won(r.tot_amt)}</div>`
+                : r.thtm_amt && r.thtm_amt !== r.amt ? `<div class="muted small">금차 ${won(r.thtm_amt)}</div>` : ''
+            }`
       }${!corp && r.corp_n > 1 ? `<div class="muted small" title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳${r.corp_bizno !== cp.corp?.bizno ? ' · 구성원' : ''}</div>` : ''}</td>
     </tr>`
   );
