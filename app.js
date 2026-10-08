@@ -336,7 +336,7 @@ function lastSub(group) {
 /* ── 업무 구분 (G2B Finder 옆 드롭다운) — 관리자 PC 만. 동료 PC·휴대폰은 늘 물품 ── */
 
 const BIZ = {
-  물품: { kinds: '물품,외자', sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역) · 물품 계약', tabs: ['orders', 'products', 'contracts', 'mine', 'marks', 'compare', 'manage'] },
+  물품: { kinds: '물품,외자', sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역) · 물품 계약', tabs: ['orders', 'products', 'mine', 'marks', 'compare', 'contracts', 'cperf', 'manage'] },
   공사: { kinds: '공사', sub: '나라장터 공사 계약 내역 · 업체 계약 실적', tabs: ['contracts', 'cperf', 'manage'] },
   용역: { kinds: '용역', sub: '나라장터 용역 계약 내역 · 업체 계약 실적', tabs: ['contracts', 'cperf', 'manage'] },
   전체: { kinds: '', sub: '나라장터 쇼핑몰 · 공사·용역·물품 계약 내역', tabs: ['orders', 'products', 'contracts', 'mine', 'cperf', 'marks', 'compare', 'manage'] },
@@ -354,6 +354,11 @@ function applyBiz() {
   $$('nav button').forEach((btn) => (btn.hidden = !conf.tabs.includes(btn.dataset.tab)));
   // 공사·용역에서는 업체 실적 자리가 계약 실적 — 전체에서는 쇼핑몰 업체 실적과 나란히 둔다
   $('nav button[data-tab="cperf"]').textContent = conf.tabs.includes('mine') ? '계약 실적' : '업체 실적';
+  // 묶음 이름·구분선은 쇼핑몰과 계약 묶음이 둘 다 보일 때만 (공사·용역·동료 PC 는 하나뿐)
+  const shown = (g) => $$(`nav button.${g}`).some((btn) => !btn.hidden && !(state.viewer && btn.classList.contains('admin-only')));
+  const both = shown('g-shop') && shown('g-cntrct');
+  for (const id of ['#navShop', '#navSep', '#navCntrct']) $(id).hidden = !both;
+  $('#navCntrct').textContent = b === '물품' ? '물품 계약' : '계약';
   $('#ctKindBox').hidden = b !== '전체';
   const multiKind = !conf.kinds || conf.kinds.includes(',');
   $('#ctView option[value="kind"]').hidden = !multiKind;

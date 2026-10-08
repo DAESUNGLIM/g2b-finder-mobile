@@ -12,6 +12,8 @@
   --warn: #b4501a;
   --danger: #b3261e;
   --grp-bg: #e9eef7;
+  --g-shop: #0f7a5a;   /* 탭 묶음 색 — 쇼핑몰 */
+  --g-cntrct: #5b4bb7; /* 탭 묶음 색 — 계약 */
   --shadow: 0 1px 2px rgba(20, 35, 60, 0.06), 0 6px 18px rgba(20, 35, 60, 0.05);
   --radius: 10px;
 }
@@ -30,6 +32,8 @@
   --warn: #e2914f;
   --danger: #f08379;
   --grp-bg: #252f3d;
+  --g-shop: #4bbd93;
+  --g-cntrct: #a99cf0;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
@@ -82,6 +86,15 @@ nav button {
 }
 nav button:hover { color: var(--text); }
 nav button.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 600; }
+/* 묶음마다 색 — 안 고른 탭은 옅은 밑줄, 고른 탭은 글자·밑줄 모두 묶음 색 */
+nav .g-shop { --g: var(--g-shop); }
+nav .g-cntrct { --g: var(--g-cntrct); }
+nav button[class*='g-'] { border-bottom-color: color-mix(in srgb, var(--g) 28%, transparent); }
+nav button[class*='g-'].on { color: var(--g); border-bottom-color: var(--g); }
+.navgroup { align-self: center; font-size: 12px; font-weight: 600; color: var(--g); padding: 0 4px 0 6px; white-space: nowrap; }
+.navsep { align-self: center; width: 1px; height: 18px; background: var(--line); margin: 0 8px; flex: none; }
+.navspace { flex: 1; min-width: 12px; }
+.navgroup[hidden], .navsep[hidden] { display: none; }
 
 main { padding: 16px; max-width: 1500px; margin: 0 auto; }
 
