@@ -91,7 +91,13 @@ nav .g-shop { --g: var(--g-shop); }
 nav .g-cntrct { --g: var(--g-cntrct); }
 nav button[class*='g-'] { border-bottom-color: color-mix(in srgb, var(--g) 28%, transparent); }
 nav button[class*='g-'].on { color: var(--g); border-bottom-color: var(--g); }
-.navgroup { align-self: center; font-size: 12px; font-weight: 600; color: var(--g); padding: 0 4px 0 6px; white-space: nowrap; }
+/* 묶음 이름표 — 탭 글자와 같은 크기, 묶음 색 테두리·옅은 배경 */
+.navgroup {
+  align-self: center; font-size: 14px; font-weight: 600; color: var(--g); white-space: nowrap;
+  padding: 3px 9px; margin: 0 4px 0 2px; border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--g) 55%, transparent);
+  background: color-mix(in srgb, var(--g) 12%, transparent);
+}
 .navsep { align-self: center; width: 1px; height: 18px; background: var(--line); margin: 0 8px; flex: none; }
 .navspace { flex: 1; min-width: 12px; }
 .navgroup[hidden], .navsep[hidden] { display: none; }
