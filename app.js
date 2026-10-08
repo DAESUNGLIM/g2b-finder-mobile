@@ -309,6 +309,7 @@ const TAB_LOADERS = {
   orders: () => searchOrders(1, 'ask'),
   products: () => searchProducts(1, 'ask'),
   contracts: loadContracts,
+  cperf: loadCperf,
   compare: loadCompare,
   mine: () => loadPerf(),
   marks: loadBookmarks,
@@ -332,8 +333,54 @@ function lastSub(group) {
   return TAB_GROUPS[group][0][0];
 }
 
+/* ── 업무 구분 (G2B Finder 옆 드롭다운) — 관리자 PC 만. 동료 PC·휴대폰은 늘 물품 ── */
+
+const BIZ = {
+  물품: { kinds: '물품,외자', sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역) · 물품 계약', tabs: ['orders', 'products', 'contracts', 'mine', 'marks', 'compare', 'manage'] },
+  공사: { kinds: '공사', sub: '나라장터 공사 계약 내역 · 업체 계약 실적', tabs: ['contracts', 'cperf', 'manage'] },
+  용역: { kinds: '용역', sub: '나라장터 용역 계약 내역 · 업체 계약 실적', tabs: ['contracts', 'cperf', 'manage'] },
+  전체: { kinds: '', sub: '나라장터 쇼핑몰 · 공사·용역·물품 계약 내역', tabs: ['orders', 'products', 'contracts', 'mine', 'cperf', 'marks', 'compare', 'manage'] },
+};
+const bizNow = () => (state.viewer ? '물품' : BIZ[state.biz] ? state.biz : '물품');
+/** 계약 검색에 쓸 구분 ('공사', '물품,외자' …). 전체면 '' — 계약 내역 탭의 '구분' 칸을 따른다 */
+const bizKinds = () => BIZ[bizNow()].kinds;
+
+/** 고른 구분에 맞게 메뉴·제목·계약 검색 칸을 바꾼다 */
+function applyBiz() {
+  const b = bizNow();
+  const conf = BIZ[b];
+  $('#bizSel').value = b;
+  if (!state.viewer) $('#bizSub').textContent = conf.sub;
+  $$('nav button').forEach((btn) => (btn.hidden = !conf.tabs.includes(btn.dataset.tab)));
+  // 공사·용역에서는 업체 실적 자리가 계약 실적 — 전체에서는 쇼핑몰 업체 실적과 나란히 둔다
+  $('nav button[data-tab="cperf"]').textContent = conf.tabs.includes('mine') ? '계약 실적' : '업체 실적';
+  $('#ctKindBox').hidden = b !== '전체';
+  const multiKind = !conf.kinds || conf.kinds.includes(',');
+  $('#ctView option[value="kind"]').hidden = !multiKind;
+  if (!multiKind && ctView() === 'kind') {
+    $('#ctView').value = 'list';
+    applyContractView();
+  }
+  const what = b === '전체' ? '공사·용역·물품' : b === '물품' ? '물품·외자' : b;
+  $('#ctTitleNote').textContent = `(${what} · 수의계약·경쟁 모두)`;
+  $('#cpTitleNote').textContent = `(${what})`;
+}
+
+function setBiz(b) {
+  state.biz = b;
+  try { localStorage.setItem('biz', b); } catch {}
+  applyBiz();
+  ct.searched = false; // 계약 내역은 다음에 열 때 새 구분으로 다시 찾는다
+  showTab(location.hash.slice(1) || 'home');
+}
+
 function showTab(name) {
-  if (state.viewer && ['home', 'settings', 'manage', 'contracts'].includes(name)) name = 'orders'; // 검색 전용은 수집·설정·계약 내역이 없다
+  if (state.viewer && ['home', 'settings', 'manage', 'contracts', 'cperf'].includes(name)) name = 'orders'; // 검색 전용은 수집·설정·계약 내역이 없다
+  const tabs = BIZ[bizNow()].tabs;
+  if (!tabs.includes(TAB_GROUPS[name] ? name : groupOf(name)) && $('#tab-' + name)) {
+    // 이 구분에 없는 메뉴 — 업체 실적은 짝(쇼핑몰 ↔ 계약)으로, 나머지는 첫 메뉴로
+    name = name === 'mine' && tabs.includes('cperf') ? 'cperf' : name === 'cperf' && tabs.includes('mine') ? 'mine' : tabs[0];
+  }
   if (TAB_GROUPS[name]) name = lastSub(name);
   if (!$('#tab-' + name)) name = 'home';
   const group = groupOf(name);
@@ -473,6 +520,7 @@ async function boot() {
   $('#pCorp').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
 
   initContracts();
+  initCperf();
 
   $('#mRun').addEventListener('click', () => loadPerf('auto'));
   loadPerfCorps();
@@ -497,6 +545,11 @@ async function boot() {
   $('#corpSave').addEventListener('click', saveCorps);
 
   await initMode();
+  if (!state.viewer) {
+    try { state.biz = localStorage.getItem('biz'); } catch {}
+    $('#bizSel').addEventListener('change', (e) => setBiz(e.target.value));
+  }
+  applyBiz();
   if (state.viewer) {
     $('#pfFetch').textContent = '관리자에게 가져오기 요청';
     $('#pfFetch').title =
@@ -1836,7 +1889,7 @@ function contractQuery() {
     instt: $('#ctInstt').value.trim(),
     corp: $('#ctCorp').value.trim(),
     corpLoc: $('#ctCorpLoc').value.trim(),
-    kind: $('#ctKind').value,
+    kind: bizKinds() || $('#ctKind').value,
     method: $('#ctMethod').value,
     from: dateVal('#ctFrom'),
     to: dateVal('#ctTo'),
@@ -1946,27 +1999,7 @@ async function searchContracts(page = 1) {
   }
 
   if (view !== 'list') {
-    const total = data.amt || 1;
-    const label = (r) => (view === 'month' ? `${String(r.label).slice(0, 4)}-${String(r.label).slice(4)}` : r.label || '(없음)');
-    $('#ctTable').innerHTML = tableHtml(
-      [
-        { label: CT_GROUP_HEAD[view] },
-        { label: '건수', num: true },
-        { label: '수의계약', num: true },
-        { label: '계약금액', num: true },
-        { label: '비중', num: true },
-      ],
-      data.rows,
-      (r) => `<tr ${CT_CLICK[view] && r.k ? `class="clickable" data-k="${esc(r.k)}"` : ''}>
-        <td>${esc(label(r))}${r.sub ? ` <span class="muted small">${esc(view === 'corp' ? fmtBizno(r.sub) : r.sub)}</span>` : ''}${
-          r.loc ? ` <span class="loc small">${esc(r.loc)}</span>` : ''
-        }</td>
-        <td class="num">${n(r.n)}</td>
-        <td class="num">${n(r.sui)} <span class="muted small">${Math.round((r.sui / r.n) * 100)}%</span></td>
-        <td class="num nowrap" title="${n(r.amt)}원">${won(r.amt)}</td>
-        <td class="num">${((r.amt / total) * 100).toFixed(1)}%</td>
-      </tr>`
-    );
+    $('#ctTable').innerHTML = contractGroupHtml(view, data, Boolean(CT_CLICK[view]));
     $$('#ctTable tr[data-k]').forEach((tr) =>
       tr.addEventListener('click', () => {
         $(CT_CLICK[view]).value = tr.dataset.k;
@@ -1982,9 +2015,40 @@ async function searchContracts(page = 1) {
     return;
   }
 
-  $('#ctTable').innerHTML = tableHtml(
-    [{ label: '계약일' }, { label: '계약명' }, { label: '계약기관' }, { label: '업체' }, { label: '계약금액', num: true }],
+  $('#ctTable').innerHTML = contractListHtml(data.rows);
+  pager('#ctPager', data.total, page, ct.size, (p) => searchContracts(p));
+}
+
+/** 묶어 보기 표. clickable 이면 줄에 data-k (누르면 그 조건으로 좁힌다) */
+function contractGroupHtml(view, data, clickable) {
+  const total = data.amt || 1;
+  const label = (r) => (view === 'month' ? `${String(r.label).slice(0, 4)}-${String(r.label).slice(4)}` : r.label || '(없음)');
+  return tableHtml(
+    [
+      { label: CT_GROUP_HEAD[view] },
+      { label: '건수', num: true },
+      { label: '수의계약', num: true },
+      { label: '계약금액', num: true },
+      { label: '비중', num: true },
+    ],
     data.rows,
+    (r) => `<tr ${clickable && r.k ? `class="clickable" data-k="${esc(r.k)}"` : ''}>
+      <td>${esc(label(r))}${r.sub ? ` <span class="muted small">${esc(view === 'corp' ? fmtBizno(r.sub) : r.sub)}</span>` : ''}${
+        r.loc ? ` <span class="loc small">${esc(r.loc)}</span>` : ''
+      }</td>
+      <td class="num">${n(r.n)}</td>
+      <td class="num">${n(r.sui)} <span class="muted small">${Math.round((r.sui / r.n) * 100)}%</span></td>
+      <td class="num nowrap" title="${n(r.amt)}원">${won(r.amt)}</td>
+      <td class="num">${((r.amt / total) * 100).toFixed(1)}%</td>
+    </tr>`
+  );
+}
+
+/** 계약 목록 표. corp: 업체 칸을 넣을지 (업체 계약 실적에서는 한 업체라 뺀다) */
+function contractListHtml(rows, { corp = true } = {}) {
+  return tableHtml(
+    [{ label: '계약일' }, { label: '계약명' }, { label: '계약기관' }, ...(corp ? [{ label: '업체' }] : []), { label: '계약금액', num: true }],
+    rows,
     (r) => `<tr>
       <td class="nowrap small">${ymd(r.cdate)}<div><span class="pill">${esc(r.kind)}</span></div></td>
       <td><a href="${esc(r.url)}" target="_blank" rel="noopener" title="나라장터에서 계약 상세 보기"><b>${esc(r.name)}</b></a>
@@ -2001,17 +2065,16 @@ async function searchContracts(page = 1) {
         <div class="muted small">${[esc(r.instt_div), esc(r.dept), esc(r.ofcl), esc(r.tel)].filter(Boolean).join(' · ')}</div>
         ${r.dmnd ? `<div class="muted small">수요기관 ${esc(r.dmnd)}</div>` : ''}
       </td>
-      <td>${esc(r.corp_nm)}
+      ${corp ? `<td>${esc(r.corp_nm)}
         <div class="muted small">${r.corp_loc ? `<span class="loc">${esc(r.corp_loc)}</span> · ` : ''}${fmtBizno(r.corp_bizno)}${
           r.corp_n > 1 ? ` · <span title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳</span>` : ''
         }</div>
-      </td>
+      </td>` : ''}
       <td class="num nowrap"><b title="${n(r.amt)}원">${won(r.amt)}</b>${
         r.thtm_amt && r.thtm_amt !== r.amt ? `<div class="muted small">금차 ${won(r.thtm_amt)}</div>` : ''
-      }</td>
+      }${!corp && r.corp_n > 1 ? `<div class="muted small" title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳</div>` : ''}</td>
     </tr>`
   );
-  pager('#ctPager', data.total, page, ct.size, (p) => searchContracts(p));
 }
 
 function initContracts() {
@@ -2036,8 +2099,207 @@ function initContracts() {
     resetDates();
     searchContracts(1);
   });
-  $('#ctCsv').addEventListener('click', () => openExport('/api/export?' + qs({ kind: 'contracts', ...contractQuery() })));
+  $('#ctCsv').addEventListener('click', () => {
+    const q = contractQuery();
+    openExport('/api/export?' + qs({ ...q, kind: 'contracts', ctKind: q.kind })); // kind 는 내보낼 종류라 구분은 ctKind 로
+  });
   applyContractView();
+}
+
+/* ── 업체 계약 실적 (관리자 PC 만 — 받아 둔 계약 내역으로, API 호출 없음) ──────── */
+
+/** corp: 고른 업체 {bizno, name, loc} — 이 PC 브라우저에 기억 */
+const cp = { corp: null, page: 1, size: 20, seq: 0 };
+
+const cpQuery = () => ({ kind: bizKinds(), method: $('#cpMethod').value, from: dateVal('#cpFrom'), to: dateVal('#cpTo') });
+
+function loadCperf() {
+  if (cp.corp) showCperf(); // 구분이 바뀌었을 수 있어 열 때마다 다시 센다 (업체 하나라 빠르다)
+}
+
+/** 업체명·사업자번호로 찾는다 — 한 곳이면 바로 열고, 여럿이면 고르게 한다 */
+async function findCperf(term = $('#cpSearch').value.trim()) {
+  const pick = $('#cpPick');
+  if (!term) return (pick.innerHTML = '<div class="notice warn" style="margin-top:10px">업체명이나 사업자번호를 넣어 주세요.</div>');
+  pick.innerHTML = '<div class="muted small" style="margin-top:10px">찾는 중…</div>';
+  let data;
+  try {
+    data = await api('/contracts?' + qs({ ...cpQuery(), corp: term, view: 'corp', top: 30 }));
+  } catch (err) {
+    return (pick.innerHTML = `<div class="notice warn" style="margin-top:10px">${esc(err.message)}</div>`);
+  }
+  const d = term.replace(/[^0-9]/g, '');
+  const isBizno = d.length === 10 && d.length === term.replace(/[-\s]/g, '').length;
+  if (isBizno) {
+    // 주계약 실적이 없어도 연다 — 공동도급으로 들어간 계약 수는 보여 줄 수 있다
+    const row = data.rows.find((r) => r.k === d);
+    return openCperf(row ? { bizno: d, name: row.label, loc: row.loc } : { bizno: d, name: fmtBizno(d), loc: '' });
+  }
+  // 업체명은 공동도급 구성원 이름에도 걸린다 — 주계약업체 이름에 든 쪽을 먼저
+  const norm = (v) => String(v || '').replace(/\s|\(주\)|㈜|주식회사/g, '').toLowerCase();
+  const own = data.rows.filter((r) => norm(r.label).includes(norm(term)));
+  const rows = own.length ? own : data.rows;
+  if (rows.length === 1) return openCperf({ bizno: rows[0].k, name: rows[0].label, loc: rows[0].loc });
+  if (!rows.length) {
+    return (pick.innerHTML = `<div class="notice warn" style="margin-top:10px">이 기간·구분에서 "${esc(term)}" 업체의 계약을 찾지 못했습니다.</div>`);
+  }
+  pick.innerHTML = `<div class="small muted" style="margin:10px 0 6px">${n(rows.length)}곳이 나왔습니다 — 줄을 눌러 고르세요 (계약금액 큰 순)</div>
+    <div class="tablewrap"><table>${contractGroupHtml('corp', { rows, amt: rows.reduce((a, r) => a + r.amt, 0) }, true)}</table></div>`;
+  $$('#cpPick tr[data-k]').forEach((tr) =>
+    tr.addEventListener('click', () => {
+      const r = rows.find((x) => x.k === tr.dataset.k);
+      openCperf({ bizno: r.k, name: r.label, loc: r.loc });
+    })
+  );
+}
+
+function openCperf(corp) {
+  cp.corp = corp;
+  cp.page = 1;
+  try { localStorage.setItem('cpCorp', JSON.stringify(corp)); } catch {}
+  $('#cpPick').innerHTML = '';
+  $('#cpSearch').value = corp.name;
+  showCperf();
+}
+
+/** 고른 업체의 실적 — 묶어 보기 몇 개를 한꺼번에 받아 그린다 */
+async function showCperf() {
+  const c = cp.corp;
+  const seq = ++cp.seq;
+  const el = $('#cpResult');
+  const base = { ...cpQuery(), corpBizno: c.bizno };
+  const multiKind = !base.kind || base.kind.includes(',');
+  const get = (extra) => api('/contracts?' + qs({ ...base, ...extra }));
+  if (!el.innerHTML) el.innerHTML = '<div class="card"><div class="empty">정리하는 중…</div></div>';
+  let r;
+  try {
+    const [list, month, instt, clsfc, method, kind, part] = await Promise.all([
+      get({ page: cp.page, size: cp.size }),
+      get({ view: 'month', top: 200 }),
+      get({ view: 'instt', top: 20 }),
+      get({ view: 'clsfc', top: 20 }),
+      get({ view: 'method', top: 50 }),
+      multiKind ? get({ view: 'kind', top: 10 }) : null,
+      api('/contracts?' + qs({ ...cpQuery(), corpPart: c.bizno, size: 1 })),
+    ]);
+    r = { list, month, instt, clsfc, method, kind, part };
+  } catch (err) {
+    if (seq === cp.seq) el.innerHTML = `<div class="card"><div class="notice warn">${esc(err.message)}</div></div>`;
+    return;
+  }
+  if (seq !== cp.seq) return;
+  const { list, month } = r;
+  const sui = month.rows.reduce((a, x) => a + x.sui, 0);
+  const partNote = r.part.total
+    ? `<div class="notice" style="margin-top:10px">공동도급 구성원으로 들어간 계약이 <b>${n(r.part.total)}</b>건 더 있습니다 (계약 전체 금액 ${won(r.part.amt)}원). 지분을 몰라 위 실적에는 넣지 않았습니다.</div>`
+    : '';
+  const side = (id, title, d) =>
+    `<div class="card"><h2>${title}${d.groups > d.rows.length ? ` <span class="small muted">${n(d.groups)}곳 가운데 금액 큰 ${n(d.rows.length)}곳</span>` : ''}</h2><div class="tablewrap"><table id="${id}"></table></div></div>`;
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h2>${esc(c.name)} <span class="small muted">${fmtBizno(c.bizno)}${c.loc ? ` · <span class="loc">${esc(c.loc)}</span>` : ''} · 주계약업체로 맺은 계약</span></h2>
+        <button class="btn small" id="cpToList" title="계약 내역 탭에서 이 업체(사업자번호)로 찾습니다. 공동도급 구성원으로 들어간 계약도 함께 나옵니다.">계약 내역 탭에서 보기</button>
+      </div>
+      <div class="tiles">${tiles([
+        { k: '계약 건수', v: n(list.total), u: '건' },
+        { k: '계약금액 합계', v: won(list.amt), u: '원' },
+        { k: '수의계약', v: `${n(sui)} <span class="small muted">${list.total ? Math.round((sui / list.total) * 100) : 0}%</span>`, u: '건' },
+        { k: '계약기관', v: n(r.instt.groups), u: '곳' },
+        { k: '평균 계약금액', v: won(list.total ? list.amt / list.total : 0), u: '원' },
+      ])}</div>
+      ${partNote}
+    </div>
+    ${list.total ? `
+    <div class="card">
+      <h2>월별 계약금액</h2>
+      <div class="viz" id="cpChart"></div>
+      <details class="viz-table"><summary>표로 보기</summary><div class="tablewrap"><table id="cpMonth"></table></div></details>
+    </div>
+    <div class="cp-two">
+      ${side('cpInstt', '계약기관', r.instt)}
+      ${side('cpClsfc', '공종·업종', r.clsfc)}
+      ${side('cpMethodT', '계약방법', r.method)}
+      ${r.kind ? side('cpKind', '구분', r.kind) : ''}
+    </div>
+    <div class="card">
+      <h2>계약 목록 <span class="small muted">최신 계약일 순</span></h2>
+      <div class="tablewrap"><table id="cpList"></table></div>
+      <div class="pager" id="cpPager"></div>
+    </div>` : ''}`;
+  $('#cpToList').addEventListener('click', () => {
+    for (const id of ['#ctKeyword', '#ctInstt', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax']) $(id).value = '';
+    $('#ctCorp').value = c.bizno;
+    $('#ctMethod').value = $('#cpMethod').value;
+    $('#ctFrom').value = $('#cpFrom').value;
+    $('#ctTo').value = $('#cpTo').value;
+    $('#ctView').value = 'list';
+    applyContractView();
+    ct.searched = true;
+    showTab('contracts');
+    searchContracts(1);
+  });
+  if (!list.total) return;
+  // 월별 — 빈 달도 0 으로 채워 기간 전체를 그린다
+  const amtOf = new Map(month.rows.map((x) => [x.k, x.amt]));
+  const cats = monthsBetween(dateVal('#cpFrom') || month.rows.at(-1)?.k, dateVal('#cpTo') || month.rows[0]?.k);
+  verticalBars($('#cpChart'), cats, [{ slot: 1, name: '계약금액', values: cats.map((m) => amtOf.get(m) || 0) }], 'month');
+  $('#cpMonth').innerHTML = contractGroupHtml('month', month, false);
+  $('#cpInstt').innerHTML = contractGroupHtml('instt', r.instt, false);
+  $('#cpClsfc').innerHTML = contractGroupHtml('clsfc', r.clsfc, false);
+  $('#cpMethodT').innerHTML = contractGroupHtml('method', r.method, false);
+  if (r.kind) $('#cpKind').innerHTML = contractGroupHtml('kind', r.kind, false);
+  $('#cpList').innerHTML = contractListHtml(list.rows, { corp: false });
+  pager('#cpPager', list.total, cp.page, cp.size, (p) => {
+    cp.page = p;
+    showCperf();
+  });
+}
+
+/** '20251008' … '20261008' → ['202510', …, '202610'] */
+function monthsBetween(from, to) {
+  const out = [];
+  if (!from || !to) return out;
+  let y = Number(String(from).slice(0, 4));
+  let m = Number(String(from).slice(4, 6));
+  const end = String(to).slice(0, 6);
+  for (let i = 0; i < 240; i++) {
+    const k = `${y}${String(m).padStart(2, '0')}`;
+    if (k > end) break;
+    out.push(k);
+    if (++m > 12) (m = 1), y++;
+  }
+  return out;
+}
+
+function initCperf() {
+  $('#cpFrom').value = daysAgo(365);
+  $('#cpTo').value = daysAgo(0);
+  try {
+    const c = JSON.parse(localStorage.getItem('cpCorp') || 'null');
+    if (c?.bizno) {
+      cp.corp = c;
+      $('#cpSearch').value = c.name;
+    }
+  } catch {}
+  $('#cpRun').addEventListener('click', () => findCperf());
+  $('#cpSearch').addEventListener('keydown', (e) => e.key === 'Enter' && findCperf());
+  for (const id of ['#cpFrom', '#cpTo', '#cpMethod']) {
+    $(id).addEventListener('change', () => {
+      if (!cp.corp) return;
+      cp.page = 1;
+      showCperf();
+    });
+  }
+  $('#cpMine').addEventListener('click', () => {
+    const mine = (state.settings.myCorps || []).filter((c) => c.bizno);
+    if (!mine.length) return alert('수집 · 설정 → 설정에서 사업자등록번호와 함께 내 회사를 먼저 등록해 주세요.');
+    if (mine.length === 1) return findCperf(mine[0].bizno);
+    $('#cpPick').innerHTML = `<div class="row" style="margin-top:10px; gap:6px">${mine
+      .map((c) => `<button class="btn small" data-bizno="${esc(c.bizno)}">${esc(c.name || fmtBizno(c.bizno))}</button>`)
+      .join('')}</div>`;
+    $$('#cpPick button[data-bizno]').forEach((b) => b.addEventListener('click', () => findCperf(b.dataset.bizno)));
+  });
 }
 
 /* ── 물품비교 (관심목록 탭에서 체크한 물품의 비교표) ─────────────── */
