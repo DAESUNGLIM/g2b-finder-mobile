@@ -2166,9 +2166,11 @@ function contractListHtml(rows, { corp = true } = {}) {
           r.corp_n > 1 ? ` · <span title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳</span>` : ''
         }</div>
       </td>` : ''}
-      <td class="num nowrap"><b title="${n(r.amt)}원">${won(r.amt)}</b>${
-        r.thtm_amt && r.thtm_amt !== r.amt ? `<div class="muted small">금차 ${won(r.thtm_amt)}</div>` : ''
-      }${!corp && r.corp_n > 1 ? `<div class="muted small" title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳</div>` : ''}</td>
+      <td class="num nowrap">${
+        r.share_rate != null
+          ? `<b title="이 업체 몫 ${n(Math.round(r.share_amt))}원">${won(r.share_amt)}</b><div class="muted small">지분 ${r.amt ? Math.round((r.share_amt / r.amt) * 1000) / 10 : 0}% · 계약 ${won(r.amt)}</div>`
+          : `<b title="${n(r.amt)}원">${won(r.amt)}</b>${r.thtm_amt && r.thtm_amt !== r.amt ? `<div class="muted small">금차 ${won(r.thtm_amt)}</div>` : ''}`
+      }${!corp && r.corp_n > 1 ? `<div class="muted small" title="${esc(r.corps)}">${esc(r.joint)} ${n(r.corp_n)}곳${r.corp_bizno !== cp.corp?.bizno ? ' · 구성원' : ''}</div>` : ''}</td>
     </tr>`
   );
 }
@@ -2270,7 +2272,7 @@ async function showCperf() {
   const c = cp.corp;
   const seq = ++cp.seq;
   const el = $('#cpResult');
-  const base = { ...cpQuery(), corpBizno: c.bizno };
+  const base = { ...cpQuery(), corpShare: c.bizno };
   const multiKind = !base.kind || base.kind.includes(',');
   const get = (extra) => api('/contracts?' + qs({ ...base, ...extra }));
   if (!el.innerHTML) el.innerHTML = '<div class="card"><div class="empty">정리하는 중…</div></div>';
@@ -2294,14 +2296,14 @@ async function showCperf() {
   const { list, month } = r;
   const sui = month.rows.reduce((a, x) => a + x.sui, 0);
   const partNote = r.part.total
-    ? `<div class="notice" style="margin-top:10px">공동도급 구성원으로 들어간 계약이 <b>${n(r.part.total)}</b>건 더 있습니다 (계약 전체 금액 ${won(r.part.amt)}원). 지분을 몰라 위 실적에는 넣지 않았습니다.</div>`
+    ? `<div class="notice" style="margin-top:10px">지분을 모르는 공동도급 계약이 <b>${n(r.part.total)}</b>건 더 있습니다 (계약 전체 금액 ${won(r.part.amt)}원). API 로만 받은 계약이라 위 실적에는 넣지 않았습니다 — 조달데이터허브 계약 내역 파일로 그 기간을 넣으면 지분만큼 더해집니다.</div>`
     : '';
   const side = (id, title, d, cls = '') =>
     `<div class="card ${cls}"><h2>${title}${d.groups > d.rows.length ? ` <span class="small muted">${n(d.groups)}곳 가운데 금액 큰 ${n(d.rows.length)}곳</span>` : ''}</h2><div class="tablewrap"><table id="${id}"></table></div></div>`;
   el.innerHTML = `
     <div class="card">
       <div class="card-head">
-        <h2>${esc(c.name)} <span class="small muted">${fmtBizno(c.bizno)}${c.loc ? ` · <span class="loc">${esc(c.loc)}</span>` : ''} · 주계약업체로 맺은 계약</span></h2>
+        <h2>${esc(c.name)} <span class="small muted">${fmtBizno(c.bizno)}${c.loc ? ` · <span class="loc">${esc(c.loc)}</span>` : ''} · 주계약 + 공동도급 지분</span></h2>
         <button class="btn small" id="cpToList" title="계약 내역 탭에서 이 업체(사업자번호)로 찾습니다. 공동도급 구성원으로 들어간 계약도 함께 나옵니다.">계약 내역 탭에서 보기</button>
       </div>
       <div class="tiles">${tiles([
