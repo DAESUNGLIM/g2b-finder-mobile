@@ -115,14 +115,14 @@
   </div>
 
   <div class="card" id="impCard">
-    <h2>파일 가져오기 <span class="small muted">(거래내역 · 쇼핑몰 등록품목)</span></h2>
-    <p class="sub">나라장터에서 내려받은 파일(.csv, .xlsx)을 <b>이 칸에 끌어다 놓거나 파일 선택</b>을 누르세요. 납품요구 물품 내역·쇼핑몰 품목 등록 내역 모두 되고, 어느 파일인지는 저절로 알아봅니다. API 호출은 쓰지 않습니다.</p>
+    <h2>파일 가져오기 <span class="small muted">(거래내역 · 쇼핑몰 등록품목 · 계약 내역)</span></h2>
+    <p class="sub">나라장터에서 내려받은 파일(.csv, .xlsx)을 <b>이 칸에 끌어다 놓거나 파일 선택</b>을 누르세요. 납품요구 물품 내역·쇼핑몰 품목 등록 내역·조달데이터허브의 업무별 구성원별 계약 내역 모두 되고, 어느 파일인지는 저절로 알아봅니다. API 호출은 쓰지 않습니다.</p>
     <div class="row">
       <button class="btn primary" id="impPickFiles">파일 선택</button>
       <button class="btn" id="impPickDir">폴더 선택</button>
       <input type="file" id="impFiles" multiple accept=".csv,.xlsx,.txt" hidden />
       <input type="file" id="impDir" webkitdirectory hidden />
-      <label class="small" title="파일 검색조건이 기간 + 세부품명(또는 물품분류)뿐이면, 그 기간·세부품명은 검색할 때 API 로 다시 받지 않습니다"><input type="checkbox" id="impCover" checked /> 파일 기간을 받아 둔 날짜로 기록</label>
+      <label class="small" title="파일 검색조건이 기간 + 세부품명(또는 물품분류)뿐이면, 그 기간·세부품명은 검색할 때 API 로 다시 받지 않습니다. 계약 내역 파일은 지역 조건 없이 받은 것이면 그 기간을 계약 API 로 다시 받지 않습니다"><input type="checkbox" id="impCover" checked /> 파일 기간을 받아 둔 날짜로 기록</label>
     </div>
     <div class="row" style="margin-top: 10px">
       <input type="text" id="impPath" placeholder="또는 폴더 경로를 붙여넣기 — 예) E:\OneDrive\...\납품DB" style="flex: 1; min-width: 260px" />

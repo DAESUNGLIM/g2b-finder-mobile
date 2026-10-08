@@ -1375,7 +1375,22 @@ function renderImport(list) {
     (r) =>
       r.error
         ? `<tr><td class="small">${esc(r.file)}</td><td colspan="7" class="muted">실패: ${esc(r.error)}</td></tr>`
-        : r.kind === 'product'
+        : r.kind === 'contract'
+          ? `<tr>
+      <td class="small">${esc(r.file)}<div class="muted">계약 내역 · 계약 ${n(r.contracts)}건${r.shares ? ` · 공동도급 지분 ${n(r.shares)}건` : ''}</div></td>
+      <td class="small">${esc(Object.keys(r.subs || {}).join(', '))}</td>
+      <td class="nowrap small">${r.minDate ? `${ymd(r.minDate)} ~ ${ymd(r.maxDate)}` : '-'}</td>
+      <td class="num">${n(r.total)}${r.bad ? ` <span class="muted small">(건너뜀 ${n(r.bad)})</span>` : ''}</td>
+      <td class="num">${n(r.inserted)}</td>
+      <td class="num">${n(r.updated)}</td>
+      <td class="num">${n(r.keptApi)}</td>
+      <td class="small">${
+        r.coverage?.marked
+          ? `${ymd(r.coverage.from)} ~ ${ymd(r.coverage.to)}${r.coverage.apiDays ? ` <span class="muted">(계약 API 수집 ${n(r.coverage.apiDays)}일 건너뜀)</span>` : ''}`
+          : `<span class="muted">안 함 — ${esc(r.coverage?.reason || '')}</span>`
+      }</td>
+    </tr>`
+          : r.kind === 'product'
           ? `<tr>
       <td class="small">${esc(r.file)}<div class="muted">쇼핑몰 등록품목 · ${esc(r.corpNames.join(', '))}${r.corpCount > r.corpNames.length ? ` 외 ${n(r.corpCount - r.corpNames.length)}곳` : ''}</div></td>
       <td class="small">${esc(Object.entries(r.dtils || {}).map(([k, v]) => `${k} ${n(v)}`).join(', '))}${
