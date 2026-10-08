@@ -19,10 +19,11 @@
 <header>
   <div class="brand">G2B <span>Finder</span></div>
   <select id="bizSel" class="bizsel admin-only" title="업무 구분 — 고른 구분에 맞는 메뉴만 보입니다">
+    <option>전체</option>
+    <option>쇼핑몰</option>
     <option>물품</option>
     <option>공사</option>
     <option>용역</option>
-    <option>전체</option>
   </select>
   <div class="small muted" id="bizSub">나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역)</div>
   <div class="headinfo">
@@ -279,16 +280,6 @@
       <div><label class="f">기관</label><input type="text" id="ctInstt" placeholder="기관명·지역 — 예) 경남 의령군, 교육청" /></div>
       <div><label class="f">업체</label><input type="text" id="ctCorp" placeholder="업체명 또는 사업자번호" /></div>
       <div><label class="f">업체 소재지</label><input type="text" id="ctCorpLoc" placeholder="예) 경남, 경기도 화성시" /></div>
-      <div id="ctKindBox">
-        <label class="f">구분</label>
-        <select id="ctKind">
-          <option value="">전체</option>
-          <option>공사</option>
-          <option>용역</option>
-          <option>물품</option>
-          <option>외자</option>
-        </select>
-      </div>
       <div>
         <label class="f">계약방법</label>
         <select id="ctMethod">
@@ -365,6 +356,11 @@
     </h2>
     <div class="row">
       <div style="flex: 1; min-width: 260px"><label class="f">업체</label><input type="text" id="cpSearch" placeholder="업체명 또는 사업자번호" /></div>
+      <div class="yearpick">
+        <label class="f">연도</label>
+        <button class="btn" id="cpYearBtn" type="button" title="체크한 해의 계약만 봅니다 (떨어진 해도 고를 수 있음). 계약은 최근 1년 동안 등록·변경된 것만 받아 두므로, 지난해 이전은 그사이 변경된 계약만 들어 있습니다.">연도 선택 ▾</button>
+        <div class="yearpop" id="cpYearPop" hidden></div>
+      </div>
       <div><label class="f">계약일 시작</label><input type="date" id="cpFrom" /></div>
       <div><label class="f">계약일 종료</label><input type="date" id="cpTo" /></div>
       <div>

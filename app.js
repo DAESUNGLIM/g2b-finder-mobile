@@ -343,20 +343,28 @@ const CKINDS = {
 };
 const SHOP_TABS = [['orders', '거래내역'], ['products', '등록품목'], ['mine', '업체 실적'], ['marks', '관심목록'], ['compare', '물품비교']];
 const BIZ = {
-  물품: { shop: true, ck: ['물품'], sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역) · 물품 계약' },
+  전체: { shop: true, ck: ['물품', '공사', '용역'], sub: '나라장터 쇼핑몰 · 물품·공사·용역 계약' },
+  쇼핑몰: { shop: true, ck: [], sub: '나라장터 종합쇼핑몰 등록품목 · 납품요구(거래내역)' },
+  물품: { shop: false, ck: ['물품'], sub: '나라장터 물품 계약 내역 · 업체 계약 실적' },
   공사: { shop: false, ck: ['공사'], sub: '나라장터 공사 계약 내역 · 업체 계약 실적' },
   용역: { shop: false, ck: ['용역'], sub: '나라장터 용역 계약 내역 · 업체 계약 실적' },
-  전체: { shop: true, ck: ['물품', '공사', '용역'], sub: '나라장터 쇼핑몰 · 물품·공사·용역 계약' },
 };
-const bizNow = () => (state.viewer ? '물품' : BIZ[state.biz] ? state.biz : '물품');
-/** 지금 보는 계약 묶음 — 전체에서는 마지막으로 누른 묶음 */
-const ckNow = () => (BIZ[bizNow()].ck.includes(state.ckind) ? state.ckind : BIZ[bizNow()].ck[0]);
+const bizNow = () => (state.viewer ? '쇼핑몰' : BIZ[state.biz] ? state.biz : '전체');
+/** 지금 보는 계약 묶음 — 전체에서는 마지막으로 누른 묶음 (쇼핑몰은 계약 탭이 없어 아무것이나) */
+const ckNow = () => {
+  const ck = BIZ[bizNow()].ck;
+  return ck.includes(state.ckind) ? state.ckind : ck[0] || '물품';
+};
 /** 계약 검색에 쓸 구분 ('공사', '물품,외자' …) */
 const bizKinds = () => CKINDS[ckNow()].kinds;
 /** 이 구분에서 열 수 있는 탭 (수집 · 설정은 늘) */
-const bizTabs = () => [...(BIZ[bizNow()].shop ? SHOP_TABS.map(([t]) => t) : []), 'contracts', 'cperf', 'manage'];
+const bizTabs = () => [
+  ...(BIZ[bizNow()].shop ? SHOP_TABS.map(([t]) => t) : []),
+  ...(BIZ[bizNow()].ck.length ? ['contracts', 'cperf'] : []),
+  'manage',
+];
 
-/** 메뉴 줄의 묶음을 그린다 — 쇼핑몰, 그리고 구분마다 계약 묶음 (동료 PC 는 쇼핑몰만, 이름표 없이) */
+/** 메뉴 줄의 묶음을 그린다 — 쇼핑몰, 그리고 구분마다 계약 묶음 (동료 PC 는 쇼핑몰만이라 이름표 없이) */
 function renderNav() {
   const conf = BIZ[bizNow()];
   const groups = [];
@@ -370,7 +378,7 @@ function renderNav() {
     .map(
       (g, i) =>
         (i ? '<span class="navsep"></span>' : '') +
-        (g.kind || groups.length > 1 ? `<span class="navgroup ${g.cls}">${g.label}</span>` : '') +
+        (state.viewer ? '' : `<span class="navgroup ${g.cls}">${g.label}</span>`) +
         g.tabs.map(([t, l]) => `<button data-tab="${t}" class="${g.cls}"${g.kind ? ` data-kind="${g.kind}"` : ''}>${l}</button>`).join('')
     )
     .join('');
@@ -394,7 +402,6 @@ function applyBiz() {
 /** 계약 묶음에 맞게 계약 내역·계약 실적의 제목과 칸을 바꾼다 */
 function applyCkind() {
   const c = CKINDS[ckNow()];
-  $('#ctKindBox').hidden = true;
   const multiKind = c.kinds.includes(','); // 물품은 물품·외자 둘이라 구분별 보기가 뜻이 있다
   $('#ctView option[value="kind"]').hidden = !multiKind;
   if (!multiKind && ctView() === 'kind') $('#ctView').value = 'list';
@@ -1941,7 +1948,7 @@ function contractQuery() {
     instt: $('#ctInstt').value.trim(),
     corp: $('#ctCorp').value.trim(),
     corpLoc: $('#ctCorpLoc').value.trim(),
-    kind: bizKinds() || $('#ctKind').value,
+    kind: bizKinds(),
     method: $('#ctMethod').value,
     from: dateVal('#ctFrom'),
     to: dateVal('#ctTo'),
@@ -2154,7 +2161,7 @@ function initContracts() {
   for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax']) {
     $(id).addEventListener('keydown', (e) => e.key === 'Enter' && searchContracts(1));
   }
-  for (const id of ['#ctKind', '#ctMethod', '#ctSort', '#ctTop']) {
+  for (const id of ['#ctMethod', '#ctSort', '#ctTop']) {
     $(id).addEventListener('change', () => searchContracts(1));
   }
   $('#ctView').addEventListener('change', () => {
@@ -2162,7 +2169,7 @@ function initContracts() {
     searchContracts(1);
   });
   $('#ctReset').addEventListener('click', () => {
-    for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax', '#ctKind', '#ctMethod']) $(id).value = '';
+    for (const id of ['#ctKeyword', '#ctInstt', '#ctCorp', '#ctCorpLoc', '#ctAmtMin', '#ctAmtMax', '#ctMethod']) $(id).value = '';
     resetDates();
     searchContracts(1);
   });
@@ -2178,7 +2185,13 @@ function initContracts() {
 /** corp: 고른 업체 {bizno, name, loc} — 이 PC 브라우저에 기억 */
 const cp = { corp: null, page: 1, size: 20, seq: 0 };
 
-const cpQuery = () => ({ kind: bizKinds(), method: $('#cpMethod').value, from: dateVal('#cpFrom'), to: dateVal('#cpTo') });
+const cpQuery = () => ({
+  kind: bizKinds(),
+  method: $('#cpMethod').value,
+  from: dateVal('#cpFrom'),
+  to: dateVal('#cpTo'),
+  years: [...(cp.years || [])].join(','),
+});
 
 function loadCperf() {
   if (cp.corp) showCperf(); // 구분이 바뀌었을 수 있어 열 때마다 다시 센다 (업체 하나라 빠르다)
@@ -2343,6 +2356,21 @@ function monthsBetween(from, to) {
 function initCperf() {
   $('#cpFrom').value = daysAgo(365);
   $('#cpTo').value = daysAgo(0);
+  const years = yearPicker({
+    btn: '#cpYearBtn',
+    pop: '#cpYearPop',
+    from: '#cpFrom',
+    to: '#cpTo',
+    key: 'cpYears',
+    max: () => daysAgo(0),
+    onChange: () => {
+      if (!cp.corp) return;
+      cp.page = 1;
+      showCperf();
+    },
+  });
+  cp.years = years.years;
+  api('/contracts/years').then(years.setList).catch(() => {});
   try {
     const c = JSON.parse(localStorage.getItem('cpCorp') || 'null');
     if (c?.bizno) {
@@ -3289,89 +3317,106 @@ function renderCorpFetch() {
   $('#pfFetchResult [data-close]').addEventListener('click', () => ($('#pfFetchResult').innerHTML = ''));
 }
 
-/* ── 실적: 연도 선택 (체크한 해만 집계, 떨어진 해도 가능) ── */
+/* ── 연도 선택 (체크한 해만, 떨어진 해도 가능) — 업체 실적·계약 실적이 같이 쓴다 ── */
 
-function loadPerfYears() {
+/**
+ * btn·pop: 버튼과 체크 목록, from·to: 시작일·종료일 칸, key: 고른 해를 기억할 이름,
+ * max(): 종료일 상한, onChange(): 고른 해가 바뀌면 (잠깐 모았다가) 부른다.
+ * 돌려주는 years 는 고른 해(Set) — 검색 조건에 쉼표로 이어 보낸다. 목록은 setList 로 채운다.
+ */
+function yearPicker({ btn, pop: popSel, from, to, key, max, onChange }) {
+  const pop = $(popSel);
+  const years = new Set();
   try {
-    perf.years = new Set(JSON.parse(localStorage.getItem('perfYears') || '[]'));
-  } catch {
-    perf.years = new Set();
-  }
-}
-
-function savePerfYears() {
-  try {
-    localStorage.setItem('perfYears', JSON.stringify([...perf.years]));
+    for (const y of JSON.parse(localStorage.getItem(key) || '[]')) years.add(String(y));
   } catch {}
-}
-
-function renderYearBtn() {
-  const ys = [...perf.years].sort();
-  $('#pfYearBtn').textContent = ys.length ? (ys.length <= 3 ? ys.join(', ') : `${ys.length}개 해`) + ' ▾' : '연도 선택 ▾';
-}
-
-/** 고른 해에 맞춰 시작일·종료일을 채운다 (첫 해 1월 1일 ~ 마지막 해 12월 31일, 어제를 넘지 않게) */
-function applyYearsToDates() {
-  const ys = [...perf.years].sort();
-  if (!ys.length) return;
-  const yesterday = daysAgo(1);
-  $('#mFrom').value = `${ys[0]}-01-01`;
-  const end = `${ys.at(-1)}-12-31`;
-  $('#mTo').value = end > yesterday ? yesterday : end;
-}
-
-async function initYearPicker() {
-  loadPerfYears();
-  applyYearsToDates(); // 첫 집계가 목록을 받기 전에 돌아도 날짜가 고른 해와 맞게
-  let years = [];
-  try {
-    years = await api('/perf/years');
-  } catch {}
-  // 데이터가 없는 해는 목록에서 빠지므로 고른 값도 정리한다
-  for (const y of [...perf.years]) if (!years.includes(y)) perf.years.delete(y);
-  const pop = $('#pfYearPop');
-  pop.innerHTML =
-    `<div class="yp-grid">${years
-      .map((y) => `<label><input type="checkbox" value="${y}"${perf.years.has(y) ? ' checked' : ''} /> ${y}년</label>`)
-      .join('')}</div>
-    <div class="yp-foot"><button class="btn small" type="button" data-act="clear">모두 해제</button>
-      <button class="btn small" type="button" data-act="close">닫기</button></div>`;
+  const save = () => {
+    try {
+      localStorage.setItem(key, JSON.stringify([...years]));
+    } catch {}
+  };
+  const label = () => {
+    const ys = [...years].sort();
+    $(btn).textContent = ys.length ? (ys.length <= 3 ? ys.join(', ') : `${ys.length}개 해`) + ' ▾' : '연도 선택 ▾';
+  };
+  /** 고른 해에 맞춰 시작일·종료일을 채운다 (첫 해 1월 1일 ~ 마지막 해 12월 31일, max() 를 넘지 않게) */
+  const toDates = () => {
+    const ys = [...years].sort();
+    if (!ys.length) return;
+    $(from).value = `${ys[0]}-01-01`;
+    const end = `${ys.at(-1)}-12-31`;
+    $(to).value = end > max() ? max() : end;
+  };
+  const sync = () => $$('input[type=checkbox]', pop).forEach((cb) => (cb.checked = years.has(cb.value)));
   let timer = null;
   const changed = () => {
-    savePerfYears();
-    renderYearBtn();
-    applyYearsToDates();
+    save();
+    label();
+    toDates();
     clearTimeout(timer);
-    timer = setTimeout(() => loadPerf('auto'), 250);
+    timer = setTimeout(onChange, 250);
   };
-  $$('input[type=checkbox]', pop).forEach((cb) =>
-    cb.addEventListener('change', () => {
-      cb.checked ? perf.years.add(cb.value) : perf.years.delete(cb.value);
-      changed();
-    })
-  );
-  pop.querySelector('[data-act=clear]').addEventListener('click', () => {
-    perf.years.clear();
-    $$('input[type=checkbox]', pop).forEach((cb) => (cb.checked = false));
+  pop.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[type=checkbox]');
+    if (!cb) return;
+    cb.checked ? years.add(cb.value) : years.delete(cb.value);
     changed();
   });
-  pop.querySelector('[data-act=close]').addEventListener('click', () => (pop.hidden = true));
-  $('#pfYearBtn').addEventListener('click', () => (pop.hidden = !pop.hidden));
+  pop.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'close') pop.hidden = true;
+    if (act === 'clear') {
+      years.clear();
+      sync();
+      changed();
+    }
+  });
+  $(btn).addEventListener('click', () => (pop.hidden = !pop.hidden));
   document.addEventListener('mousedown', (e) => {
     if (!pop.hidden && !pop.parentElement.contains(e.target)) pop.hidden = true;
   });
   // 날짜를 직접 고치면 연도 선택은 푼다 (둘이 어긋나지 않게)
-  ['#mFrom', '#mTo'].forEach((id) =>
+  [from, to].forEach((id) =>
     $(id).addEventListener('change', () => {
-      if (!perf.years.size) return;
-      perf.years.clear();
-      $$('input[type=checkbox]', pop).forEach((cb) => (cb.checked = false));
-      savePerfYears();
-      renderYearBtn();
+      if (!years.size) return;
+      years.clear();
+      sync();
+      save();
+      label();
     })
   );
-  renderYearBtn();
-  applyYearsToDates();
+  label();
+  toDates(); // 목록을 받기 전에 첫 검색이 돌아도 날짜가 고른 해와 맞게
+  return {
+    years,
+    /** 고를 수 있는 해 — 자료가 없는 해는 고른 값에서도 뺀다 */
+    setList(all) {
+      all = all.map(String);
+      for (const y of [...years]) if (!all.includes(y)) years.delete(y);
+      pop.innerHTML = `<div class="yp-grid">${all
+        .map((y) => `<label><input type="checkbox" value="${y}"${years.has(y) ? ' checked' : ''} /> ${y}년</label>`)
+        .join('')}</div>
+        <div class="yp-foot"><button class="btn small" type="button" data-act="clear">모두 해제</button>
+          <button class="btn small" type="button" data-act="close">닫기</button></div>`;
+      save();
+      label();
+      toDates();
+    },
+  };
+}
+
+async function initYearPicker() {
+  const picker = yearPicker({
+    btn: '#pfYearBtn',
+    pop: '#pfYearPop',
+    from: '#mFrom',
+    to: '#mTo',
+    key: 'perfYears',
+    max: () => daysAgo(1),
+    onChange: () => loadPerf('auto'),
+  });
+  perf.years = picker.years;
+  picker.setList(await api('/perf/years').catch(() => []));
 }
 
 /* ── 실적: 검색 조건 (세부품명·업체소재지·기관지역) ── */
