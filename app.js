@@ -357,10 +357,8 @@ function applyBiz() {
   $('#ctKindBox').hidden = b !== '전체';
   const multiKind = !conf.kinds || conf.kinds.includes(',');
   $('#ctView option[value="kind"]').hidden = !multiKind;
-  if (!multiKind && ctView() === 'kind') {
-    $('#ctView').value = 'list';
-    applyContractView();
-  }
+  if (!multiKind && ctView() === 'kind') $('#ctView').value = 'list';
+  applyContractView();
   const what = b === '전체' ? '공사·용역·물품' : b === '물품' ? '물품·외자' : b;
   $('#ctTitleNote').textContent = `(${what} · 수의계약·경쟁 모두)`;
   $('#cpTitleNote').textContent = `(${what})`;
@@ -1961,10 +1959,18 @@ function applyContractView() {
   $('#ctSort').disabled = !list;
   $('#ctViewHint').textContent = list
     ? ''
-    : CT_CLICK[ctView()]
-      ? '금액이 큰 순서 · 줄을 누르면 그 계약 목록을 봅니다'
-      : '금액이 큰 순서';
+    : ctView() === 'corp' && corpOpensPerf()
+      ? '금액이 큰 순서 · 줄을 누르면 그 업체의 계약 실적을 봅니다'
+      : CT_CLICK[ctView()]
+        ? '금액이 큰 순서 · 줄을 누르면 그 계약 목록을 봅니다'
+        : '금액이 큰 순서';
 }
+
+/** 업체별 줄을 누르면 계약 실적을 여는지 — 계약 실적 탭이 있는 구분(공사·용역·전체)에서만. 물품은 계약 목록으로 */
+const corpOpensPerf = () => BIZ[bizNow()].tabs.includes('cperf');
+
+/** 줄마다 구분 표시 — 구분이 하나로 정해진 화면에서는 모두 같은 글자라 뺀다 (물품은 외자만 표시) */
+const kindPill = (k) => (bizNow() === '전체' || (bizNow() === '물품' && k === '외자') ? `<div><span class="pill">${esc(k)}</span></div>` : '');
 
 /** 묶어 보기에서 줄을 누르면 채울 칸 */
 const CT_CLICK = { corp: '#ctCorp', instt: '#ctInstt', corpSido: '#ctCorpLoc', corpLoc: '#ctCorpLoc' };
@@ -2002,6 +2008,16 @@ async function searchContracts(page = 1) {
     $('#ctTable').innerHTML = contractGroupHtml(view, data, Boolean(CT_CLICK[view]));
     $$('#ctTable tr[data-k]').forEach((tr) =>
       tr.addEventListener('click', () => {
+        if (view === 'corp' && corpOpensPerf()) {
+          // 업체 줄은 그 업체의 계약 실적으로 (기간·계약방법은 지금 조건 그대로)
+          const r = data.rows.find((x) => x.k === tr.dataset.k);
+          $('#cpFrom').value = $('#ctFrom').value;
+          $('#cpTo').value = $('#ctTo').value;
+          $('#cpMethod').value = ['수의', '경쟁'].includes($('#ctMethod').value) ? $('#ctMethod').value : '';
+          openCperf({ bizno: r.k, name: r.label, loc: r.loc || '' }, false);
+          showTab('cperf'); // 탭을 열면서 그린다
+          return;
+        }
         $(CT_CLICK[view]).value = tr.dataset.k;
         $('#ctView').value = 'list';
         applyContractView();
@@ -2050,7 +2066,7 @@ function contractListHtml(rows, { corp = true } = {}) {
     [{ label: '계약일' }, { label: '계약명' }, { label: '계약기관' }, ...(corp ? [{ label: '업체' }] : []), { label: '계약금액', num: true }],
     rows,
     (r) => `<tr>
-      <td class="nowrap small">${ymd(r.cdate)}<div><span class="pill">${esc(r.kind)}</span></div></td>
+      <td class="nowrap small">${ymd(r.cdate)}${kindPill(r.kind)}</td>
       <td><a href="${esc(r.url)}" target="_blank" rel="noopener" title="나라장터에서 계약 상세 보기"><b>${esc(r.name)}</b></a>
         <div class="muted small">${[
           `<span class="pill ${r.method === '수의계약' ? 'sme' : 'mas'}">${esc(r.method)}</span>`,
@@ -2153,13 +2169,14 @@ async function findCperf(term = $('#cpSearch').value.trim()) {
   );
 }
 
-function openCperf(corp) {
+/** show: 바로 그릴지 (탭을 새로 여는 쪽은 탭이 열리면서 그린다) */
+function openCperf(corp, show = true) {
   cp.corp = corp;
   cp.page = 1;
   try { localStorage.setItem('cpCorp', JSON.stringify(corp)); } catch {}
   $('#cpPick').innerHTML = '';
   $('#cpSearch').value = corp.name;
-  showCperf();
+  if (show) showCperf();
 }
 
 /** 고른 업체의 실적 — 묶어 보기 몇 개를 한꺼번에 받아 그린다 */
