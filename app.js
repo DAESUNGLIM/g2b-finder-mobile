@@ -1198,13 +1198,22 @@ async function loadSuggestions() {
 
 /* ── 현황 · 수집 ──────────────────────────────────────────────── */
 
+/** 현황 숫자는 서버가 뒤에서 센다 — 자료가 바뀐 직후에는 예전 값이 오고(counting), 조금 뒤 다시 물어 새 값으로 바꾼다 */
+let homeRecount = 0;
+let homeRecountTries = 0;
+
 async function loadHome() {
   const ov = await api('/overview');
+  clearTimeout(homeRecount);
+  if (!ov.counting) homeRecountTries = 0;
+  else if (homeRecountTries++ < 24) homeRecount = setTimeout(() => $('#tab-home') && !$('#tab-home').hidden && loadHome().catch(() => {}), 5000);
+  const cnt = (v, unit, fmt = n) => (v == null ? '세는 중…' : fmt(v) + unit);
+  const again = ov.counting && ov.orderItem.count != null ? ' · 다시 세는 중' : '';
   $('#homeTiles').innerHTML = tiles([
-    { k: '등록품목', v: n(ov.product.count) + '건', u: `${ymd(ov.product.from)} ~ ${ymd(ov.product.to)}` },
-    { k: '거래내역(품목줄)', v: n(ov.orderItem.count) + '건', u: `${ymd(ov.orderItem.from)} ~ ${ymd(ov.orderItem.to)}` },
-    { k: '거래 금액 합계', v: won(ov.orderItem.amount) + '원', u: `납품요구 ${n(ov.orderHead.count)}건` },
-    { k: '수요기관', v: n(ov.orderItem.institutions) + '곳', u: `업체 ${n(ov.orderItem.corps)}곳` },
+    { k: '등록품목', v: cnt(ov.product.count, '건'), u: `${ymd(ov.product.from)} ~ ${ymd(ov.product.to)}` },
+    { k: '거래내역(품목줄)', v: cnt(ov.orderItem.count, '건'), u: `${ymd(ov.orderItem.from)} ~ ${ymd(ov.orderItem.to)}${again}` },
+    { k: '거래 금액 합계', v: cnt(ov.orderItem.amount, '원', won), u: `납품요구 ${n(ov.orderHead.count || 0)}건` },
+    { k: '수요기관', v: cnt(ov.orderItem.institutions, '곳'), u: `업체 ${n(ov.orderItem.corps || 0)}곳` },
     ...((ov.coverage || [])
       .filter((c) => c.dataset === 'dlvrDtl')
       .map((c) => ({

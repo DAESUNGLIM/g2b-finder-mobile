@@ -4,6 +4,7 @@
 
 import { db } from './db.js';
 import { myCorps } from './config.js';
+import { countOverview } from './ovsql.js';
 
 const clampInt = (v, min, max, dflt) => {
   const n = Number(v);
@@ -89,18 +90,23 @@ function myCorpClause(w, prefix = '', idx = '') {
   const i = String(idx ?? '').trim() === '' ? -1 : Number(idx);
   const corps = i >= 0 && all[i] ? [all[i]] : all;
   if (!corps.length) return false;
-  const ors = [];
+  // 사업자번호는 숫자만 또는 000-00-00000 모양으로 들어 있다. REPLACE(...) = ? 로 맞추면 색인을 못 타
+  // 거래내역 1천만 줄을 다 읽으므로(1분), 두 모양을 그대로 넣어 색인으로 찾는다.
+  const nos = [];
+  const names = [];
   for (const c of corps) {
-    if (c.bizno) {
-      ors.push(`REPLACE(${prefix}corp_bizno, '-', '') = ?`);
-      w.args.push(c.bizno);
-    } else if (c.name) {
-      ors.push(`${prefix}corp_nm = ?`);
-      w.args.push(c.name);
-    }
+    const no = String(c.bizno || '').replace(/\D/g, '');
+    if (no) {
+      nos.push(no);
+      if (no.length === 10) nos.push(`${no.slice(0, 3)}-${no.slice(3, 5)}-${no.slice(5)}`);
+    } else if (c.name) names.push(c.name);
   }
+  const marks = (list) => list.map(() => '?').join(',');
+  const ors = [];
+  if (nos.length) ors.push(`${prefix}corp_bizno IN (${marks(nos)})`);
+  if (names.length) ors.push(`${prefix}corp_nm IN (${marks(names)})`);
   if (!ors.length) return false;
-  w.add('(' + ors.join(' OR ') + ')');
+  w.add('(' + ors.join(' OR ') + ')', ...nos, ...names);
   return true;
 }
 
@@ -860,32 +866,10 @@ export function performance(q = {}) {
 }
 
 /**
- * 등록품목 현황 숫자 — product_current 로 세면 100만 줄(쇼핑몰 전체 등록 내역 파일)에서 2분 넘게 걸려
- * 화면을 열 때마다 서버가 멈춘다. 계약 끝난·내려간 품목만 빼고 바로 세며(계약 변경 전 옛 버전 몇천 줄이 더 세어짐),
- * 5분 동안은 센 값을 다시 쓴다.
+ * 현황 화면 숫자. 표 전체를 세는 부분(counts)은 오래 걸려서 PC 서버는 세어 둔 값을 넘긴다 (ovstat.js).
+ * 넘기지 않으면 그 자리에서 센다 (휴대폰 — 자료가 작다).
  */
-let productCounts = null;
-function productOverview() {
-  if (productCounts && Date.now() - productCounts.at < 5 * 60e3) return productCounts.v;
-  const live = `FROM product WHERE COALESCE(delisted, 0) = 0
-     AND (COALESCE(cntrct_end, '') = '' OR cntrct_end >= strftime('%Y%m%d', 'now', '+9 hours'))`;
-  const byDataset = db.prepare(`SELECT dataset, COUNT(*) c ${live} GROUP BY dataset ORDER BY c DESC`).all();
-  const p = db.prepare(`SELECT COUNT(DISTINCT corp_nm) corps, MIN(NULLIF(rgst_date,'')) f, MAX(rgst_date) t ${live}`).get();
-  const v = { count: byDataset.reduce((a, r) => a + r.c, 0), corps: p.corps, from: p.f, to: p.t, byDataset };
-  productCounts = { at: Date.now(), v };
-  return v;
-}
-
-export function overview() {
-  const o = db
-    .prepare(
-      `SELECT COUNT(*) c, COALESCE(SUM(amt),0) amt, COUNT(DISTINCT dminstt_nm) instts,
-              COUNT(DISTINCT corp_nm) corps, MIN(NULLIF(rcpt_date,'')) f, MAX(rcpt_date) t
-         FROM order_latest`
-    )
-    .get();
-  const h = db.prepare('SELECT COUNT(*) c FROM order_head').get();
-
+export function overview(counts = countOverview(db)) {
   const mine = (() => {
     const w = orderWhere({ mine: true });
     if (!myCorps().length) return null;
@@ -897,12 +881,7 @@ export function overview() {
       .get(...w.args);
   })();
 
-  return {
-    product: productOverview(),
-    orderItem: { count: o.c, amount: o.amt, institutions: o.instts, corps: o.corps, from: o.f, to: o.t },
-    orderHead: { count: h.c },
-    mine,
-  };
+  return { ...counts, mine };
 }
 
 /* ── 북마크 ───────────────────────────────────────────────────────── */
