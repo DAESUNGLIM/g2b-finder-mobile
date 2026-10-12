@@ -711,10 +711,11 @@ function initPublish() {
 async function publishRun(base) {
   const btns = ['#pubNow', '#pubBase'];
   btns.forEach((id) => ($(id).disabled = true));
-  $('#pubState').innerHTML = `<span class="badge">${base ? '기본자료 만드는 중… (몇십 초)' : '배포 중…'}</span>`;
+  $('#pubState').innerHTML = `<span class="badge">${base ? '기본자료 만들기를 시작하는 중…' : '배포 중…'}</span>`;
   try {
     const r = await api('/publish/now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base }) });
     renderPublish(r.status);
+    if (r.result?.kind === 'wait') alert(r.result.why);
   } catch (err) {
     alert(err.message);
     await loadPublish();
@@ -738,7 +739,8 @@ function renderPublish(s) {
   if (s.base) {
     rows.push(`기본자료 <b>${ymdhm(s.base.createdAt)}</b> · ${mb(s.base.size)}`);
     rows.push(`변경분 ${n(s.patches)}개 · ${mb(s.patchBytes || 0)}`);
-    rows.push(s.pending ? `<b>아직 안 보낸 바뀐 줄 ${n(s.pending)}개</b>` : '보낼 것 없음 (최신)');
+    if (s.building) rows.push(`<span class="badge">${s.building.mode === 'mbase' ? '휴대폰용 ' : ''}기본자료 만드는 중 — ${ymdhm(s.building.startedAt)}부터 (뒤에서 돌아 검색은 그대로 됩니다)</span>`);
+    rows.push(s.pending ? `<b>아직 안 보낸 바뀐 줄 ${s.pending > s.pendingCap ? n(s.pendingCap) + '개 이상' : n(s.pending) + '개'}</b>` : '보낼 것 없음 (최신)');
     if (s.publishedAt) rows.push(`마지막 배포 ${ymdhm(s.publishedAt)}`);
   } else rows.push('아직 배포한 적이 없습니다.');
   if (s.last?.error) rows.push(`<span class="badge warn">오류</span> ${esc(s.last.error)}`);
@@ -938,9 +940,12 @@ function renderBadges() {
     mode.className = 'badge ok';
     mode.title = '관리자 PC 가 배포한 자료로 검색합니다. 새 품목·기간은 관리자 PC 에서 받아야 들어옵니다.';
     const b = $('#usageBadge');
-    b.textContent = f.dataAt ? `자료 ${ymdhm(f.dataAt)} 기준` : '자료 확인 중…';
+    // 휴대폰에는 최근 거래내역만 싣는다 (f.since — mobile/worker.js)
+    b.textContent = f.dataAt ? `자료 ${ymdhm(f.dataAt)} 기준${f.since ? ` · 거래 ${ymd(f.since)}부터` : ''}` : '자료 확인 중…';
     b.className = 'badge ' + (f.error ? 'warn' : '');
-    b.title = f.error ? `배포 폴더 확인 실패: ${f.error}` : `마지막 확인 ${f.lastCheck ? ymdhm(f.lastCheck) : '-'}`;
+    b.title = f.error
+      ? `배포 폴더 확인 실패: ${f.error}`
+      : `마지막 확인 ${f.lastCheck ? ymdhm(f.lastCheck) : '-'}${f.since ? ` · 휴대폰에는 ${ymd(f.since)} 이후 거래내역만 있습니다. 그 이전은 PC 에서 보세요.` : ''}`;
     return;
   }
   mode.textContent = s.mock ? '샘플 데이터 모드' : '실데이터 (인증키 적용)';

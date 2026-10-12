@@ -198,7 +198,7 @@ async function installBase(m) {
     } catch {}
   }
   // 새 기본자료에는 파일 등록품목 묶음이 없다 — 다시 검색할 때 받는다
-  await writeState({ slot: next, baseId: m.base.id, mbaseId: mb.id, applied: mb.seq, dataAt: mb.createdAt, baseAt: mb.createdAt, pdLoaded: {} });
+  await writeState({ slot: next, baseId: m.base.id, mbaseId: mb.id, applied: mb.seq, dataAt: mb.createdAt, baseAt: mb.createdAt, pdLoaded: {}, since: mb.since || null, sinceSets: mb.sinceSets || [] });
   overviewCache = null;
 }
 
@@ -219,6 +219,10 @@ const PK = {
  * (쇼핑몰 전체 등록 내역은 100만 줄 — PC 의 publish.js buildMobileBase 와 같은 규칙).
  */
 function forPhone(t, row) {
+  // 오래된 거래내역은 휴대폰에 두지 않는다 (기본자료를 만들 때 자른 날짜 — pubbuild.js toMobile). 받아 둔 날짜 기록도 같이
+  const since = state.since;
+  if (since && (t === 'order_item' || t === 'order_head')) return String(row.rcpt_date || '') >= since;
+  if (since && t === 'coverage' && (state.sinceSets || []).some((id) => String(row.dataset || '').startsWith(id))) return String(row.day || '') >= since;
   if (t === 'product') return !String(row.seen_run || '').startsWith('file:');
   if (t === 'corp_fetch') return row.term !== '*' && !/"file":/.test(String(row.result || ''));
   return true;
@@ -457,6 +461,7 @@ function feedStatus() {
     baseAt: state.baseAt || null,
     applied: state.applied || 0,
     dataAt: state.dataAt || state.baseAt || null,
+    since: state.since || null,
   };
 }
 
