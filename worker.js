@@ -497,8 +497,6 @@ async function route(method, url, body) {
       filterLabels: spec.FILTER_LABELS,
       settings: conf.publicSettings(),
       usage: { day: '', total: 0, rows: [], services: [], shopLeft: 0 },
-      // 전체 요약은 수집·설정 탭(검색 전용에는 없음)에서만 쓴다 — 휴대폰에서 몇 초 걸려 계산하지 않는다
-      overview: null,
       collecting: false,
       viewer: true,
       mobile: true,
