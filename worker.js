@@ -198,7 +198,7 @@ async function installBase(m) {
     } catch {}
   }
   // 새 기본자료에는 파일 등록품목 묶음이 없다 — 다시 검색할 때 받는다
-  await writeState({ slot: next, baseId: m.base.id, mbaseId: mb.id, applied: mb.seq, dataAt: mb.createdAt, baseAt: mb.createdAt, pdLoaded: {}, since: mb.since || null, sinceSets: mb.sinceSets || [] });
+  await writeState({ slot: next, baseId: m.base.id, mbaseId: mb.id, applied: mb.seq, dataAt: mb.createdAt, baseAt: mb.createdAt, pdLoaded: {} });
   overviewCache = null;
 }
 
@@ -218,11 +218,16 @@ const PK = {
  * 파일로 넣은 쇼핑몰 등록품목과 그 파일로 적은 "등록품목을 받아 본 업체" 는 휴대폰에 두지 않는다
  * (쇼핑몰 전체 등록 내역은 100만 줄 — PC 의 publish.js buildMobileBase 와 같은 규칙).
  */
+let phoneDtils = null; // 배포 목록의 mobileDtils — 없으면(예전 배포) 거르지 않는다
+let phoneSets = [];
 function forPhone(t, row) {
-  // 오래된 거래내역은 휴대폰에 두지 않는다 (기본자료를 만들 때 자른 날짜 — pubbuild.js toMobile). 받아 둔 날짜 기록도 같이
-  const since = state.since;
-  if (since && (t === 'order_item' || t === 'order_head')) return String(row.rcpt_date || '') >= since;
-  if (since && t === 'coverage' && (state.sinceSets || []).some((id) => String(row.dataset || '').startsWith(id))) return String(row.day || '') >= since;
+  // 거래내역은 관리자 PC 가 세부품명을 골라 따로 받아 둔 것만 둔다 (PC 의 pubbuild.js toMobile 과 같은 규칙).
+  // 전체 파일로 넣은 나머지 세부품명(해마다 340만 줄)과 '전체를 받아 둔 날짜' 기록은 넣지 않는다.
+  if (phoneDtils) {
+    if (t === 'order_item') return phoneDtils.has(row.dtil_clsfc_nm);
+    if (t === 'order_head') return phoneDtils.has(row.rprsnt_dtil_nm);
+    if (t === 'coverage' && row.filter_key === '' && phoneSets.some((id) => String(row.dataset || '').startsWith(id))) return false;
+  }
   if (t === 'product') return !String(row.seen_run || '').startsWith('file:');
   if (t === 'corp_fetch') return row.term !== '*' && !/"file":/.test(String(row.result || ''));
   return true;
@@ -348,6 +353,8 @@ function checkFeed() {
         }
       }
       if (Array.isArray(m.myCorps)) setConfig('myCorps', m.myCorps);
+      phoneDtils = Array.isArray(m.mobileDtils) ? new Set(m.mobileDtils) : null;
+      phoneSets = m.mobileSets || [];
       pdFiles = m.pd?.files || null;
       let applied = state.applied || 0;
       let n = 0;
@@ -461,7 +468,6 @@ function feedStatus() {
     baseAt: state.baseAt || null,
     applied: state.applied || 0,
     dataAt: state.dataAt || state.baseAt || null,
-    since: state.since || null,
   };
 }
 

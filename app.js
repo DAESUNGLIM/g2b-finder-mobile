@@ -940,12 +940,9 @@ function renderBadges() {
     mode.className = 'badge ok';
     mode.title = '관리자 PC 가 배포한 자료로 검색합니다. 새 품목·기간은 관리자 PC 에서 받아야 들어옵니다.';
     const b = $('#usageBadge');
-    // 휴대폰에는 최근 거래내역만 싣는다 (f.since — mobile/worker.js)
-    b.textContent = f.dataAt ? `자료 ${ymdhm(f.dataAt)} 기준${f.since ? ` · 거래 ${ymd(f.since)}부터` : ''}` : '자료 확인 중…';
+    b.textContent = f.dataAt ? `자료 ${ymdhm(f.dataAt)} 기준` : '자료 확인 중…';
     b.className = 'badge ' + (f.error ? 'warn' : '');
-    b.title = f.error
-      ? `배포 폴더 확인 실패: ${f.error}`
-      : `마지막 확인 ${f.lastCheck ? ymdhm(f.lastCheck) : '-'}${f.since ? ` · 휴대폰에는 ${ymd(f.since)} 이후 거래내역만 있습니다. 그 이전은 PC 에서 보세요.` : ''}`;
+    b.title = f.error ? `배포 폴더 확인 실패: ${f.error}` : `마지막 확인 ${f.lastCheck ? ymdhm(f.lastCheck) : '-'}`;
     return;
   }
   mode.textContent = s.mock ? '샘플 데이터 모드' : '실데이터 (인증키 적용)';
