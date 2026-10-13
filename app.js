@@ -133,19 +133,15 @@ function fillBanner(kind, html) {
 }
 
 /**
- * 세부품명이 없으면 검색하지 않는다 — 세부품명 없이 빠진 날짜를 채우면 전체 품목(하루 API 15회 안팎)을 받게 된다.
- * 없으면 안내를 띄우고 결과 칸을 비운 뒤 false.
+ * 거래내역은 조건이 하나라도 있어야 검색한다 — 세부품명·품명·업체명·사업자등록번호·업체소재지·수요기관·기관지역·통합 검색어·내 회사만.
+ * 기간·금액·체크(MAS 등)만으로는 2천만 줄을 다 읽게 되어 검색하지 않는다. 없으면 안내를 띄우고 결과 칸을 비운 뒤 false.
+ * 세부품명이 없는 검색은 저장된 자료에서만 찾는다 — 빠진 날짜를 API 로 채우지 않는다 (ensureCoverage).
  */
-function requireDtil(dtil, inputId, clearIds) {
-  if (dtil) return true;
+function requireOrderScope(q, clearIds) {
+  if (['dtil', 'clsfc', 'corp', 'bizno', 'corpLoc', 'instt', 'rgn', 'keyword'].some((k) => q[k]) || q.mine) return true;
   clearIds.forEach((id) => ($(id).innerHTML = ''));
-  fillBanner(
-    'warn',
-    state.viewer
-      ? '<b>세부품명</b>을 넣고 검색하세요.'
-      : '<b>세부품명</b>을 넣고 검색하세요. 세부품명 없이 검색하면 전체 품목을 API 로 받게 되어 하루 한도를 금방 씁니다.'
-  );
-  $(inputId).focus();
+  fillBanner('warn', '<b>세부품명·업체명·사업자등록번호·업체소재지·수요기관</b> 같은 조건을 하나 이상 넣고 검색하세요. 기간·금액만으로는 검색하지 않습니다.');
+  $('#oDtil').focus();
   return false;
 }
 
@@ -176,7 +172,25 @@ function requireProductScope(pq, clearIds) {
  */
 async function ensureCoverage({ from, to, dtil, mode, rerun, dataset = 'dlvrDtl', ignoreMaxDays = false }) {
   if (!from || !to) return fillBanner('', '');
-  if (!dtil) return; // 전체 품목은 받지 않는다 (requireDtil 참고)
+  if (!dtil) {
+    // 세부품명 없이는 API 로 받지 않는다 (전체 품목을 받게 되어 하루 한도를 금방 쓴다) — 저장된 자료로만 보여 주고,
+    // 거래내역이면 전체 품목을 받아 둔 날이 아닌 날이 있는지 알린다
+    if (dataset !== 'dlvrDtl') return;
+    let all;
+    try {
+      all = await api('/coverage?' + qs({ dataset, from, to }));
+    } catch {
+      return;
+    }
+    return fillBanner(
+      '',
+      all.missingDays
+        ? `<span class="small">세부품명 없이 검색해 <b>저장된 자료에서만</b> 찾았습니다. ${ymd(all.from)} ~ ${ymd(all.to)} 가운데 ${n(all.missingDays)}일은 전체 품목을 받아 둔 날이 아니어서, 따로 받아 둔 세부품명의 거래만 들어 있습니다. 세부품명을 넣고 검색하면 그 품목의 빠진 날짜를 채웁니다.</span>`
+        : all.totalDays
+          ? `<span class="small">${ymd(all.from)} ~ ${ymd(all.to)} ${n(all.totalDays)}일 모두 저장된 자료로 보여드렸습니다 · API 호출 0회</span>`
+          : ''
+    );
+  }
   let cov;
   try {
     cov = await api('/coverage?' + qs({ dataset, from, to, dtil }));
@@ -542,7 +556,7 @@ async function boot() {
     searchOrders(1, 'ask');
   });
   $('#oCsv').addEventListener('click', () => {
-    if (!requireDtil(orderQuery().dtil, '#oDtil', [])) return;
+    if (!requireOrderScope(orderQuery(), [])) return;
     if (orderView() !== 'list') return downloadGroupCsv();
     openExport('/api/export?' + qs({ kind: 'orders', ...orderQuery() }));
   });
@@ -971,6 +985,7 @@ function renderBadges() {
  * ↑↓ 로 고르고 Enter 로 넣는다 (목록이 떠 있을 때 Enter 는 검색 대신 선택).
  *   fetch(term) → 후보 배열, row(r) → 한 줄 HTML, pick(r) → 골랐을 때,
  *   empty(term) → 후보가 없을 때 문구, enterFirst → 고른 줄 없이 Enter 면 첫 줄을 고른다.
+ * 서버가 목록을 아직 못 만들었으면 배열 대신 { preparing, rows } 로 답한다 (미리 세어 두는 목록 — 서버를 켠 직후).
  */
 function attachSuggest(input, { fetch, row, pick, empty, enterFirst = false, delay = 120 }) {
   input.setAttribute('autocomplete', 'off');
@@ -1014,11 +1029,13 @@ function attachSuggest(input, { fetch, row, pick, empty, enterFirst = false, del
     }
     if (my !== seq) return; // 더 최근 입력의 결과가 우선
     if (document.activeElement !== input) return;
+    const preparing = !Array.isArray(rows) && Boolean(rows.preparing);
+    if (!Array.isArray(rows)) rows = rows.rows || [];
     items = rows;
     active = -1;
     box.innerHTML = rows.length
       ? rows.map((r, i) => `<div class="ac-item" data-i="${i}">${row(r)}</div>`).join('')
-      : `<div class="ac-empty">${esc(empty(term))}</div>`;
+      : `<div class="ac-empty">${esc(preparing ? '자동완성 목록을 준비하는 중입니다 (서버를 켠 뒤 1~2분 걸립니다)' : empty(term))}</div>`;
     box.hidden = false;
   };
 
@@ -1128,21 +1145,15 @@ function attachProductSuggest(input, field, getDtil = () => '') {
  */
 function attachContractSuggest(input, field, pick = (r) => fillInput(input, r.fill)) {
   const what = { instt: '기관이', corp: '업체가', corpLoc: '업체 소재지가' }[field];
-  let preparing = false;
   attachSuggest(input, {
     delay: 180,
-    fetch: async (term) => {
-      const r = await api('/suggest/contract?' + qs({ field, term, kind: bizKinds(), limit: 12 }));
-      preparing = Boolean(r.preparing);
-      return r.rows;
-    },
+    fetch: (term) => api('/suggest/contract?' + qs({ field, term, kind: bizKinds(), limit: 12 })),
     row: (r) => `
       <span class="ac-name">${esc(r.value)}</span>
       <span class="ac-sub">${esc(r.bizno ? [fmtBizno(r.bizno), r.loc].filter(Boolean).join(' · ') : r.sub || '')}</span>
       <span class="ac-cnt">${won(r.amt)}원 · ${n(r.cnt)}건</span>`,
     pick,
-    empty: () =>
-      preparing ? '자동완성 목록을 준비하는 중입니다 (서버를 켠 뒤 1분쯤 걸립니다)' : `받아 둔 ${CKINDS[ckNow()].what} 계약에 맞는 ${what} 없습니다`,
+    empty: () => `받아 둔 ${CKINDS[ckNow()].what} 계약에 맞는 ${what} 없습니다`,
   });
 }
 
@@ -1647,7 +1658,7 @@ function orderQuery() {
 async function searchOrders(page, fillMode) {
   state.orders.page = page;
   const q = { ...orderQuery(), page, size: state.orders.size };
-  if (!requireDtil(q.dtil, '#oDtil', ['#oSummary', '#oTable', '#oPager', '#oGroupChart', '#oGroupTable'])) return;
+  if (!requireOrderScope(q, ['#oSummary', '#oTable', '#oPager', '#oGroupChart', '#oGroupTable'])) return;
   fillBanner('', '');
   const data = await api('/orders?' + qs(q));
   state.orders.last = data;
@@ -2573,7 +2584,8 @@ async function findIpCorp(term = $('#ipSearch').value.trim()) {
   // 계약 쪽은 공동도급 구성원 이름에도 걸린다 — 주계약업체 이름에 든 쪽만
   const norm = (v) => String(v || '').replace(/\s|\(주\)|㈜|주식회사/g, '').toLowerCase();
   const byBiz = new Map();
-  for (const r of shop) byBiz.set(r.bizno, { bizno: r.bizno, name: r.name, shop: r.amt || 0, con: 0 });
+  // 쇼핑몰 쪽 목록을 아직 못 만든 서버는 배열 대신 { preparing } 으로 답한다
+  for (const r of Array.isArray(shop) ? shop : []) byBiz.set(r.bizno, { bizno: r.bizno, name: r.name, shop: r.amt || 0, con: 0 });
   for (const r of con.rows || []) {
     if (!norm(r.label).includes(norm(term))) continue;
     const x = byBiz.get(r.k) || byBiz.set(r.k, { bizno: r.k, name: r.label, shop: 0, con: 0 }).get(r.k);
@@ -2758,6 +2770,21 @@ function initIperf() {
   );
   $('#ipAdd').addEventListener('click', () => findIpCorp());
   $('#ipSearch').addEventListener('keydown', (e) => e.key === 'Enter' && findIpCorp());
+  // 업체 추가 칸 자동완성 — 쇼핑몰 거래와 계약에서 함께 찾고, 고르면 바로 비교 목록에 넣는다 (고르지 않고 Enter·찾아서 추가는 전처럼)
+  attachSuggest($('#ipSearch'), {
+    delay: 180,
+    fetch: (term) => api('/suggest/corps?' + qs({ term, limit: 12 })),
+    row: (r) => `
+      <span class="ac-name">${esc(r.name)}</span>
+      <span class="ac-sub">${esc([fmtBizno(r.bizno), r.loc].filter(Boolean).join(' · '))}</span>
+      <span class="ac-cnt">쇼핑몰 ${r.shop ? won(r.shop) + '원' : '-'} · 계약 ${r.con ? won(r.con) + '원' : '-'}</span>`,
+    pick: (r) => {
+      $('#ipPick').innerHTML = '';
+      $('#ipSearch').value = '';
+      if (addIpCorp({ bizno: r.bizno, name: r.name })) showIperf('auto');
+    },
+    empty: () => '저장된 쇼핑몰 거래와 계약에 맞는 업체가 없습니다',
+  });
   $('#ipRun').addEventListener('click', () => showIperf('auto'));
   for (const id of ['#ipFrom', '#ipTo', '#ipPeriod']) $(id).addEventListener('change', () => showIperf(id === '#ipPeriod' ? null : 'auto'));
   $('#ipSplit').addEventListener('change', () => {

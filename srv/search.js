@@ -18,7 +18,7 @@ const like = (v) => `%${String(v).trim()}%`;
  * 그 품목만 (=), 아니면 이름에 들어 있는 것 모두 (LIKE).
  * "태양광발전장치" 로 찾을 때 "건물일체형태양광발전장치" 가 섞이지 않게 하면서, "태양광" 처럼 일부만 넣어도 찾게.
  */
-function isDtilName(t) {
+export function isDtilName(t) {
   try {
     if (db.prepare(`SELECT 1 FROM clsfc WHERE kind = 'dtil' AND name = ? LIMIT 1`).get(t)) return true;
   } catch {} // 물품분류 목록을 아직 받지 않았으면 표가 없을 수 있다
@@ -191,18 +191,68 @@ const ORDER_SORTS = {
   corp: 'corp_nm ASC, rcpt_date DESC, dlvr_req_no DESC, CAST(prdct_sno AS INTEGER)',
 };
 
+/**
+ * 표에서 한 줄을 꺼내 읽는 값 — 날짜 색인(idx_oi_date_cov)을 하루치 읽는 것에 견준 어림 (하루 8천 줄 안팎).
+ * 업체 한 곳의 줄이 (기간 일수 × 이 값)보다 적으면 그 업체의 줄을 이름 색인으로 찾아 표에서 읽는 쪽이,
+ * 많으면 기간 안의 줄을 날짜 색인으로 모두 읽으며 대조하는 쪽이 빠르다 (재 본 값: 15만 줄 업체의 7년치 0.5~3초 대 7초, 30일치 3초 대 0.05초).
+ */
+const ROWS_PER_DAY = 125;
+/** 이름으로 바로 찾을 때 이름 수 한도 — "주식회사" 처럼 수천 곳이 걸리는 글자는 대조로 둔다 */
+const NAMES_MAX = 300;
+
+/**
+ * 업체명·수요기관 조건 (세부품명 없이 찾을 때). 글자만 대조하면(LIKE '%…%') 색인을 못 타 기간 안의 줄을 모두 읽는다 —
+ * 업체 한 곳의 7년치를 보는 데도 7초다. 그래서 그 글자가 든 이름을 먼저 고르고 (이름 색인을 이름마다 건너뛰며 읽는다 — 업체 2만 곳에 0.05초),
+ * 그 이름들의 줄이 기간에 견줘 적으면 이름으로 바로 찾는다 (IN — 색인을 탄다). 결과는 대조와 같다.
+ */
+function nameWhere(w, col, value, days) {
+  const t = String(value ?? '').trim();
+  if (!t) return w;
+  const names = db
+    .prepare(
+      `WITH RECURSIVE t(v) AS (
+         SELECT MIN(${col}) FROM order_item WHERE ${col} > ''
+         UNION ALL
+         SELECT (SELECT MIN(${col}) FROM order_item WHERE ${col} > t.v) FROM t WHERE t.v IS NOT NULL)
+       SELECT v FROM t WHERE v LIKE ? LIMIT ${NAMES_MAX + 1}`
+    )
+    .all(like(t))
+    .map((r) => r.v);
+  if (!names.length) return w.add('0 = 1'); // 그 글자가 든 이름이 없다 — 읽을 줄도 없다
+  if (names.length <= NAMES_MAX) {
+    const marks = names.map(() => '?').join(',');
+    const rows = db.prepare(`SELECT COUNT(*) c FROM order_item WHERE ${col} IN (${marks})`).get(...names).c;
+    if (rows < days * ROWS_PER_DAY) return w.add(`${col} IN (${marks})`, ...names);
+  }
+  return w.add(`${col} LIKE ?`, like(t));
+}
+
 /** 거래내역 검색의 공통 조건 — 목록과 집계가 같은 필터를 쓴다. */
 function orderWhere(q) {
   const w = where();
-  w.maybe(q.from, 'rcpt_date >= ?', (v) => String(v).replace(/[^0-9]/g, ''));
-  w.maybe(q.to, 'rcpt_date <= ?', (v) => String(v).replace(/[^0-9]/g, ''));
-  w.maybe(q.corp, 'corp_nm LIKE ?', like);
-  w.maybe(q.bizno, "REPLACE(corp_bizno,'-','') LIKE ?", (v) => like(String(v).replace(/[^0-9]/g, '')));
-  w.maybe(q.instt, 'dminstt_nm LIKE ?', like);
+  const ymdOf = (v) => String(v ?? '').replace(/[^0-9]/g, '');
+  const msOf = (d, dflt) => (d.length === 8 ? Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8)) : dflt);
+  // 기간 길이(일) — 날짜가 없으면 받아 둔 자료의 처음(2016년)부터 오늘까지로 본다
+  const days = Math.max(1, (msOf(ymdOf(q.to), Date.now()) - msOf(ymdOf(q.from), Date.UTC(2016, 0, 1))) / 86400e3 + 1);
+  // 세부품명을 정했으면 그 품목의 색인(idx_oi_dtil_date)으로 읽으므로 이름·번호는 그 안에서 대조만 한다
+  const noDtil = !String(q.dtil ?? '').trim();
+  w.maybe(q.from, 'rcpt_date >= ?', ymdOf);
+  w.maybe(q.to, 'rcpt_date <= ?', ymdOf);
+  if (noDtil) nameWhere(w, 'corp_nm', q.corp, days);
+  else w.maybe(q.corp, 'corp_nm LIKE ?', like);
+  // 사업자등록번호 열 자리를 다 넣었으면 번호 색인으로 찾는다 (줄이 기간에 견줘 적을 때 — nameWhere 와 같은 어림). 일부만 넣으면 대조.
+  const no = ymdOf(q.bizno);
+  const nos = [no, `${no.slice(0, 3)}-${no.slice(3, 5)}-${no.slice(5)}`];
+  if (noDtil && no.length === 10 && db.prepare('SELECT COUNT(*) c FROM order_item WHERE corp_bizno IN (?, ?)').get(...nos).c < days * ROWS_PER_DAY) {
+    w.add('corp_bizno IN (?, ?)', ...nos);
+  } else w.maybe(q.bizno, "REPLACE(corp_bizno,'-','') LIKE ?", (v) => like(ymdOf(v)));
+  if (noDtil) nameWhere(w, 'dminstt_nm', q.instt, days);
+  else w.maybe(q.instt, 'dminstt_nm LIKE ?', like);
   w.maybe(q.insttDiv, 'dminstt_div = ?');
   w.maybe(q.rgn, 'dminstt_rgn LIKE ?', like);
   // 업체소재지는 거래내역에 없어서 corp_info(파일의 계약시점 업체소재시군구·단가계약 본사 소재지)로 찾는다.
-  w.maybe(q.corpLoc, 'corp_bizno IN (SELECT bizno FROM corp_info WHERE loc LIKE ?)', like);
+  // 앞의 + 는 사업자번호 색인을 타지 않게 한다 — 타면 그 지역 업체(수백 곳)의 모든 해 줄을 표에서 읽어, 30일치를 보는 데 20초가 걸린다.
+  w.maybe(q.corpLoc, '+corp_bizno IN (SELECT bizno FROM corp_info WHERE loc LIKE ?)', like);
   w.maybe(q.clsfc, 'prdct_clsfc_nm LIKE ?', like);
   dtilWhere(w, q.dtil);
   w.maybe(q.idntNo, 'prdct_idnt_no = ?', (v) => String(v).trim());
@@ -441,7 +491,7 @@ export function suggestOrderValues(field, term, dtil, limit = 12) {
  * 지역 후보에 시·도 묶음을 더하고 term 으로 거른다.
  * "대구" 로 치면 "대구광역시" 전체 묶음이 먼저 나오게. rows: { value, cnt, amt }
  */
-function withSido(rows, t, lim) {
+export function withSido(rows, t, lim) {
   const sido = new Map();
   for (const r of rows) {
     const k = r.value.split(' ')[0];
