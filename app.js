@@ -481,6 +481,8 @@ function showTab(name) {
 /* ── 초기화 ───────────────────────────────────────────────────── */
 
 async function boot() {
+  // 메뉴 줄은 이 답이 와야 그린다 — 다른 요청보다 먼저 보낸다 (서버는 한 번에 하나씩 답해서, 느린 요청 뒤에 서면 메뉴가 그만큼 늦게 뜬다)
+  const who = api('/whoami').catch(() => ({}));
   $('#themeBtn').addEventListener('click', toggleTheme);
   $('#quitBtn').addEventListener('click', quitApp);
   applyTheme(localStorage.getItem('theme') || 'light');
@@ -620,7 +622,7 @@ async function boot() {
   $('#corpAdd').addEventListener('click', () => addCorpRow({ name: '', bizno: '' }));
   $('#corpSave').addEventListener('click', saveCorps);
 
-  await initMode();
+  await initMode(await who);
   if (!state.viewer) {
     try {
       state.biz = localStorage.getItem('biz');
@@ -641,14 +643,9 @@ async function boot() {
 /* ── 어느 쪽 프로그램인가 ───────────────────────────────────── */
 
 /** 검색 전용(동료 PC)이면 수집·설정을 숨기고 받은 자료 상태만 보여준다. */
-async function initMode() {
-  try {
-    const who = await api('/whoami');
-    state.viewer = Boolean(who.viewer);
-    state.mobile = Boolean(who.mobile); // 모바일 검색용 (mobile/worker.js) — 휴대폰 안에서 검색만
-  } catch {
-    state.viewer = false;
-  }
+async function initMode(who) {
+  state.viewer = Boolean(who.viewer);
+  state.mobile = Boolean(who.mobile); // 모바일 검색용 (mobile/worker.js) — 휴대폰 안에서 검색만
   if (state.viewer) return initViewer();
   initPublish();
   initInbox();
