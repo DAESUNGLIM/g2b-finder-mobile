@@ -1032,6 +1032,12 @@ function attachSuggest(input, { fetch, row, pick, empty, enterFirst = false, del
   input.addEventListener(
     'keydown',
     (e) => {
+      if (e.key === 'Enter' && (box.hidden || !items.length || !(active >= 0 || enterFirst))) {
+        // 고르지 않고 Enter — 검색으로 넘어가므로 목록을 닫고, 오는 중인 후보도 버린다 (결과를 가리지 않게)
+        clearTimeout(timer);
+        seq++;
+        return close();
+      }
       if (box.hidden || !items.length) return;
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -1118,9 +1124,9 @@ function attachProductSuggest(input, field, getDtil = () => '') {
 
 /**
  * 계약 내역 값 칸(기관·업체·업체 소재지) — 받아 둔 계약에서, 지금 보는 구분(공사·용역·물품)의 계약금액 큰 순.
- * 이름이 같은 업체가 여럿이면 고른 업체만 나오게 사업자번호를 칸에 넣는다 (r.fill).
+ * 이름이 같은 업체가 여럿이면 고른 업체만 나오게 사업자번호를 칸에 넣는다 (r.fill). pick 을 주면 칸에 넣는 대신 그것을 부른다.
  */
-function attachContractSuggest(input, field) {
+function attachContractSuggest(input, field, pick = (r) => fillInput(input, r.fill)) {
   const what = { instt: '기관이', corp: '업체가', corpLoc: '업체 소재지가' }[field];
   let preparing = false;
   attachSuggest(input, {
@@ -1132,9 +1138,9 @@ function attachContractSuggest(input, field) {
     },
     row: (r) => `
       <span class="ac-name">${esc(r.value)}</span>
-      <span class="ac-sub">${esc(r.sub || '')}</span>
+      <span class="ac-sub">${esc(r.bizno ? [fmtBizno(r.bizno), r.loc].filter(Boolean).join(' · ') : r.sub || '')}</span>
       <span class="ac-cnt">${won(r.amt)}원 · ${n(r.cnt)}건</span>`,
-    pick: (r) => fillInput(input, r.fill),
+    pick,
     empty: () =>
       preparing ? '자동완성 목록을 준비하는 중입니다 (서버를 켠 뒤 1분쯤 걸립니다)' : `받아 둔 ${CKINDS[ckNow()].what} 계약에 맞는 ${what} 없습니다`,
   });
@@ -2486,6 +2492,8 @@ function initCperf() {
   } catch {}
   $('#cpRun').addEventListener('click', () => findCperf());
   $('#cpSearch').addEventListener('keydown', (e) => e.key === 'Enter' && findCperf());
+  // 업체 칸 자동완성 — 고르면 바로 그 업체의 실적을 연다 (고르지 않고 Enter·찾기는 전처럼 이 기간의 계약에서 찾는다)
+  attachContractSuggest($('#cpSearch'), 'corp', (r) => openCperf({ bizno: r.bizno, name: r.value, loc: r.loc }));
   for (const id of ['#cpFrom', '#cpTo', '#cpMethod']) {
     $(id).addEventListener('change', () => {
       if (!cp.corp) return;
