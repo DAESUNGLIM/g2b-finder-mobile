@@ -941,7 +941,6 @@ async function refreshMeta() {
       .join('');
 
   renderBadges();
-  loadSuggestions();
 }
 
 function renderBadges() {
@@ -989,7 +988,6 @@ function renderBadges() {
  */
 function attachSuggest(input, { fetch, row, pick, empty, enterFirst = false, delay = 120 }) {
   input.setAttribute('autocomplete', 'off');
-  input.removeAttribute('list'); // 브라우저 기본 목록과 겹치지 않게
   const host = input.parentElement;
   host.classList.add('ac-host');
   const box = document.createElement('div');
@@ -1213,28 +1211,6 @@ async function syncClsfcNow() {
     alert(err.message);
   }
   setTimeout(loadClsfcInfo, 500);
-}
-
-async function loadSuggestions() {
-  const map = {
-    dlCorp: 'corp',
-    dlInstt: 'instt',
-    dlRgn: 'rgn',
-    dlClsfc: 'clsfc',
-    dlDtil: 'dtil',
-    dlProductDtil: 'productDtil',
-    dlProductCorp: 'productCorp',
-  };
-  await Promise.all(
-    Object.entries(map).map(async ([id, field]) => {
-      try {
-        const rows = await api('/suggest?' + qs({ field, limit: 30 }));
-        $('#' + id).innerHTML = rows.map((r) => `<option value="${esc(r.value)}">`).join('');
-      } catch {
-        /* 자동완성은 실패해도 그냥 넘어간다 */
-      }
-    })
-  );
 }
 
 /* ── 현황 · 수집 ──────────────────────────────────────────────── */

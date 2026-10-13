@@ -400,30 +400,6 @@ export function orderHistory(no, sno) {
 
 /* ── 자동완성 / 개요 ──────────────────────────────────────────────── */
 
-export function suggest(field, term, limit = 15) {
-  const cols = {
-    dtil: ['order_item', 'dtil_clsfc_nm'],
-    clsfc: ['order_item', 'prdct_clsfc_nm'],
-    corp: ['order_item', 'corp_nm'],
-    instt: ['order_item', 'dminstt_nm'],
-    rgn: ['order_item', 'dminstt_rgn'],
-    productDtil: ['product', 'dtil_clsfc_nm'],
-    productCorp: ['product', 'corp_nm'],
-  };
-  const target = cols[field];
-  if (!target) return [];
-  const [table, col] = target;
-  const t = String(term || '').trim();
-  const w = t ? `WHERE ${col} LIKE ?` : `WHERE ${col} <> ''`;
-  const args = t ? [like(t)] : [];
-  return db
-    .prepare(
-      `SELECT ${col} AS value, COUNT(*) cnt FROM ${table} ${w} AND ${col} <> ''
-        GROUP BY ${col} ORDER BY cnt DESC LIMIT ?`
-    )
-    .all(...args, clampInt(limit, 1, 50, 15));
-}
-
 /**
  * 거래내역 검색 칸 자동완성 — 저장된 거래내역에 실제로 있는 값만, 금액이 큰 순.
  * dtil(세부품명)이 있으면 그 품목 거래 안에서만 찾는다. 속도를 위해 변경차수는 따지지 않는다(대략값).

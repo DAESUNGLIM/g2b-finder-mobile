@@ -588,7 +588,6 @@ async function route(method, url, body) {
   if (path === '/items/status' && method === 'GET') return { ...clsfc.clsfcStatus(), syncing: false };
   if (path === '/suggest/order' && method === 'GET') return store.suggestOrderValues(q.field, q.term, q.dtil, q.limit);
   if (path === '/suggest/product' && method === 'GET') return store.suggestProductValues(q.field, q.term, q.dtil, q.limit);
-  if (path === '/suggest' && method === 'GET') return store.suggest(q.field, q.term, q.limit);
 
   if (path === '/bookmarks' && method === 'GET') return store.listBookmarks();
   if (path === '/bookmarks' && method === 'POST') return store.addBookmark(body || {});

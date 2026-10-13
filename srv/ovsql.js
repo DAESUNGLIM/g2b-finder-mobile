@@ -42,29 +42,3 @@ export function countOverview(db) {
     orderHead: { count: h.c },
   };
 }
-
-/**
- * 검색 칸을 누르면 먼저 보여 줄 값(자주 나오는 것 50개) — 화면을 열 때 칸마다 한 번씩 묻는다.
- * 거래내역 전체에서 세면 칸마다 10초~1분이 걸려(지역·품명은 색인도 없다) 가장 최근에 들어온 50만 줄에서만 센다.
- * 등록품목은 색인으로 전체를 센다.
- */
-const TOP_ROWS = 500000;
-const TOP_COLS = { dtil: 'dtil_clsfc_nm', clsfc: 'prdct_clsfc_nm', corp: 'corp_nm', instt: 'dminstt_nm', rgn: 'dminstt_rgn' };
-const TOP_PRODUCT = { productDtil: 'dtil_clsfc_nm', productCorp: 'corp_nm' };
-export const TOP_FIELDS = [...Object.keys(TOP_COLS), ...Object.keys(TOP_PRODUCT)];
-
-export function countTops(db) {
-  const tops = {};
-  for (const [field, col] of Object.entries(TOP_COLS)) {
-    tops[field] = db
-      .prepare(
-        `SELECT ${col} AS value, COUNT(*) cnt FROM (SELECT ${col} FROM order_item ORDER BY rowid DESC LIMIT ${TOP_ROWS})
-          WHERE ${col} <> '' GROUP BY ${col} ORDER BY cnt DESC LIMIT 50`
-      )
-      .all();
-  }
-  for (const [field, col] of Object.entries(TOP_PRODUCT)) {
-    tops[field] = db.prepare(`SELECT ${col} AS value, COUNT(*) cnt FROM product WHERE ${col} <> '' GROUP BY ${col} ORDER BY cnt DESC LIMIT 50`).all();
-  }
-  return tops;
-}
