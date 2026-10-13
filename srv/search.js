@@ -240,19 +240,26 @@ export function searchOrders(q = {}) {
     )
     .get(...w.args);
 
-  const rows = db
+  // 목록은 두 번에 나눠 읽는다: ① 이 쪽에 보여 줄 줄이 어느 것인지만 고르고 (정렬에 쓰는 칸이 색인에 다 있어 표를 읽지 않는다)
+  // ② 그 줄(50개)만 표에서 읽는다. 한 번에 읽으면 금액순 같은 정렬에서 조건에 맞는 줄 전부(수십만~수백만)를 표에서 꺼내 온다.
+  const keys = db
     .prepare(
-      `SELECT dlvr_req_no, chg_ord, prdct_sno, rcpt_date, dlvr_req_nm, cntrct_no,
-              corp_nm, corp_bizno, corp_div, dminstt_cd, dminstt_nm, dminstt_div, dminstt_rgn,
-              prdct_clsfc_nm, dtil_clsfc_nm, prdct_idnt_no, spec_nm,
-              uprc, qty, unit, amt, dlvr_tmlmt, cncls_stle,
-              mas_yn, exclc_yn, smetpr_yn, cnstwk_mtrl_yn, fnl_yn,
-              (SELECT loc FROM corp_info ci WHERE ci.bizno = corp_bizno) corp_loc
+      `SELECT dlvr_req_no, chg_ord, prdct_sno
          FROM order_latest ${w.clause()}
         WINDOW w AS (PARTITION BY dlvr_req_no)
         ORDER BY ${order} LIMIT ? OFFSET ?`
     )
     .all(...w.args, size, (page - 1) * size);
+  const one = db.prepare(
+    `SELECT dlvr_req_no, chg_ord, prdct_sno, rcpt_date, dlvr_req_nm, cntrct_no,
+            corp_nm, corp_bizno, corp_div, dminstt_cd, dminstt_nm, dminstt_div, dminstt_rgn,
+            prdct_clsfc_nm, dtil_clsfc_nm, prdct_idnt_no, spec_nm,
+            uprc, qty, unit, amt, dlvr_tmlmt, cncls_stle,
+            mas_yn, exclc_yn, smetpr_yn, cnstwk_mtrl_yn, fnl_yn,
+            (SELECT loc FROM corp_info ci WHERE ci.bizno = corp_bizno) corp_loc
+       FROM order_item WHERE dlvr_req_no = ? AND chg_ord = ? AND prdct_sno = ?`
+  );
+  const rows = keys.map((k) => one.get(k.dlvr_req_no, k.chg_ord, k.prdct_sno)).filter(Boolean);
 
   return {
     total: sum.c,
@@ -638,7 +645,12 @@ function perfWhere(q, years = perfYears(q)) {
   const c = where();
   c.maybe(q.from, 'rcpt_date >= ?', (v) => String(v).replace(/[^0-9]/g, ''));
   c.maybe(q.to, 'rcpt_date <= ?', (v) => String(v).replace(/[^0-9]/g, ''));
-  if (years.length) c.add(`substr(rcpt_date, 1, 4) IN (${years.map(() => '?').join(',')})`, ...years);
+  if (years.length) {
+    // 가장 이른 해 ~ 가장 늦은 해로 먼저 좁힌다 (substr(...) IN 만으로는 색인을 못 타 전체를 읽는다)
+    const sorted = [...years].sort();
+    c.add('rcpt_date >= ? AND rcpt_date <= ?', sorted[0] + '0101', sorted[sorted.length - 1] + '1231');
+    c.add(`substr(rcpt_date, 1, 4) IN (${years.map(() => '?').join(',')})`, ...years);
+  }
   dtilWhere(c, q.fDtil);
   c.maybe(q.corpLoc, 'corp_bizno IN (SELECT bizno FROM corp_info WHERE loc LIKE ?)', like);
   c.maybe(q.rgn, 'dminstt_rgn LIKE ?', like);
@@ -740,7 +752,8 @@ export function shopContractNos(biznos) {
 }
 
 export function orderYears() {
-  const r = db.prepare(`SELECT MIN(rcpt_date) a, MAX(rcpt_date) b FROM order_item`).get();
+  // MIN·MAX 를 한 문장에 같이 쓰면 색인을 처음부터 끝까지 읽는다 (2천만 줄에서 11초) — 따로 물으면 양 끝만 본다
+  const r = db.prepare(`SELECT (SELECT MIN(rcpt_date) FROM order_item WHERE rcpt_date > '') a, (SELECT MAX(rcpt_date) FROM order_item) b`).get();
   if (!r.a) return [];
   const out = [];
   for (let y = Number(r.b.slice(0, 4)); y >= Number(r.a.slice(0, 4)); y--) out.push(String(y));
