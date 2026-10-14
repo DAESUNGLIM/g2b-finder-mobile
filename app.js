@@ -381,6 +381,48 @@ const bizTabs = () => [
   'manage',
 ];
 
+/** 계약 자료를 받아 둔 기간 — 구분(물품·공사·용역)마다 이어진 [시작, 끝] 목록. 파일을 넣으면 늘어나므로 쓸 때마다 다시 받는다 */
+let ctCover = null;
+const loadCtCover = () =>
+  api('/contracts/coverage')
+    .then((c) => {
+      ctCover = c;
+      applyCoverTitle();
+    })
+    .catch(() => {});
+
+const shiftYmd = (s, days) => new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8) + days)).toISOString().slice(0, 10).replace(/-/g, '');
+/** 며칠 안 된 날은 아직 받는 중일 수 있어 빈 날로 치지 않는다 */
+const coverEnd = () => daysAgo(3).replace(/-/g, '');
+
+/** [from, to] 가운데 받아 둔 기간(ranges)에 들지 않는 구간들 */
+function coverGaps(ranges, from, to) {
+  const out = [];
+  let at = from;
+  for (const [a, b] of ranges) {
+    if (at > to) break;
+    if (b < at) continue;
+    if (a > to) break;
+    if (a > at) out.push([at, shiftYmd(a, -1)]);
+    at = shiftYmd(b, 1);
+  }
+  if (at <= to) out.push([at, to]);
+  return out;
+}
+
+const spanText = (list, max = 4) =>
+  list.slice(0, max).map(([a, b]) => (a === b ? ymd(a) : `${ymd(a)} ~ ${ymd(b)}`)).join(', ') + (list.length > max ? ` 외 ${list.length - max}구간` : '');
+
+/** 계약 실적의 연도 선택 설명 — 지금 묶음의 계약을 받아 둔 기간을 적는다 */
+function applyCoverTitle() {
+  const ranges = ctCover?.[ckNow()] || [];
+  const end = coverEnd();
+  const have = ranges.map(([a, b]) => (b >= end ? `${ymd(a)} ~ 지금` : a === b ? ymd(a) : `${ymd(a)} ~ ${ymd(b)}`)).join(', ');
+  $('#cpYearBtn').title =
+    '체크한 해의 계약만 봅니다 (떨어진 해도 고를 수 있음).' +
+    (have ? ` ${ckNow()} 계약을 받아 둔 기간은 ${have} 입니다 — 그 밖의 해에는 그사이 변경된 계약만 들어 있습니다.` : '');
+}
+
 /** 메뉴 줄의 묶음을 그린다 — 쇼핑몰, 그리고 구분마다 계약 묶음 (동료 PC 는 쇼핑몰만이라 이름표 없이) */
 function renderNav() {
   const conf = BIZ[bizNow()];
@@ -427,6 +469,7 @@ function applyCkind() {
   applyContractView();
   $('#ctTitleNote').textContent = `(${c.what} · 수의계약·경쟁 모두)`;
   $('#cpTitleNote').textContent = `(${c.what})`;
+  applyCoverTitle();
 }
 
 /** 계약 묶음을 바꾼다 (전체에서 다른 묶음의 탭을 눌렀을 때) */
@@ -629,6 +672,7 @@ async function boot() {
       state.ckind = localStorage.getItem('ckind');
     } catch {}
     $('#bizSel').addEventListener('change', (e) => setBiz(e.target.value));
+    loadCtCover();
   }
   applyBiz();
   if (state.viewer) {
@@ -2575,7 +2619,7 @@ async function findIpCorp(term = $('#ipSearch').value.trim()) {
   if (!rows.length) return (pick.innerHTML = `<div class="notice warn" style="margin-top:10px">"${esc(term)}" 업체를 쇼핑몰 거래와 계약에서 찾지 못했습니다.</div>`);
   pick.innerHTML = `<div class="small muted" style="margin:10px 0 6px">${n(rows.length)}곳이 나왔습니다 — 줄을 눌러 추가하세요</div>
     <div class="tablewrap"><table>${tableHtml(
-      [{ label: '업체' }, { label: '쇼핑몰 납품 (저장된 전체)', num: true }, { label: '계약 (최근 1년)', num: true }],
+      [{ label: '업체' }, { label: '쇼핑몰 납품 (저장된 전체)', num: true }, { label: '계약 (받아 둔 전체)', num: true }],
       rows,
       (r) => `<tr class="clickable" data-k="${esc(r.bizno)}">
         <td>${esc(r.name)} <span class="muted small">${esc(fmtBizno(r.bizno))}</span>${r.loc ? ` <span class="loc small">${esc(r.loc)}</span>` : ''}</td>
@@ -2609,9 +2653,11 @@ async function showIperf(fillMode = null) {
     return clear('업체를 추가하면 쇼핑몰·물품·공사·용역 실적을 한데 모아 보여 줍니다.');
   }
   const q = { from: dateVal('#ipFrom'), to: dateVal('#ipTo'), years: [...ip.years].join(',') };
+  const cover = loadCtCover(); // 안내 문구용 — 못 받아도 집계는 그린다
   let d;
   try {
     d = await api('/integrated?' + qs({ ...q, biznos: ip.corps.map((c) => c.bizno).join(','), by: $('#ipPeriod').value }));
+    await cover;
   } catch (err) {
     if (seq === ip.seq) clear(esc(err.message));
     return;
@@ -2671,8 +2717,34 @@ function renderIpSummary(d) {
   const notes = [];
   const ex = d.excluded.reduce((a, x) => ({ n: a.n + x.n, amt: a.amt + x.amt }), { n: 0, amt: 0 });
   if (ex.n) notes.push(`쇼핑몰 단가계약(제3자단가·다수공급자·일반단가 등) <b>${n(ex.n)}</b>건(계약정보의 예상 총액 ${won(ex.amt)}원)은 실적이 아니라 뺐습니다 — 실제 판매는 쇼핑몰 납품요구로 들어가 있습니다.`);
-  if (dateVal('#ipFrom') < daysAgo(365).replace(/-/g, '')) notes.push('물품·공사·용역 계약은 최근 1년 동안 등록·변경된 것만 받아 두어, 그 이전 기간은 대부분 쇼핑몰만 들어 있습니다.');
+  notes.push(...ipCoverNotes());
   $('#ipNotes').innerHTML = notes.map((t) => `<div class="notice" style="margin-top:10px">${t}</div>`).join('');
+}
+
+/** 고른 기간 가운데 계약 자료를 받아 두지 않은 구간을 알린다 — 빈 구간이 같은 구분끼리 한 줄로 */
+function ipCoverNotes() {
+  if (!ctCover) return [];
+  const from = dateVal('#ipFrom') || '20160101'; // 쇼핑몰 자료가 시작되는 해
+  const to = [dateVal('#ipTo') || coverEnd(), coverEnd()].sort()[0];
+  const spans = ip.years.size ? [...ip.years].sort().map((y) => [[from, `${y}0101`].sort()[1], [to, `${y}1231`].sort()[0]]) : [[from, to]];
+  const byGaps = new Map();
+  for (const k of Object.keys(CKINDS)) {
+    const gaps = spans.flatMap(([a, b]) => coverGaps(ctCover[k] || [], a, b));
+    // 해를 띄엄띄엄 고르지 않았으면 해 사이에서 끊긴 구간을 다시 잇는다
+    const joined = [];
+    for (const g of gaps) {
+      const last = joined[joined.length - 1];
+      if (last && shiftYmd(last[1], 1) === g[0]) last[1] = g[1];
+      else joined.push([...g]);
+    }
+    if (!joined.length) continue;
+    const text = spanText(joined);
+    byGaps.set(text, [...(byGaps.get(text) || []), k]);
+  }
+  return [...byGaps].map(
+    ([text, kinds]) =>
+      `고른 기간 중 <b>${text}</b>은 ${kinds.join('·')} 계약 자료를 받아 두지 않아${kinds.length === Object.keys(CKINDS).length ? ' 쇼핑몰만 들어 있습니다' : ' 그 계약은 빠져 있습니다'} (그사이 변경된 옛 계약 몇 건만 섞여 있습니다).`
+  );
 }
 
 /** 기간 칸 — 시작일~종료일의 모든 달(분기·해)을 빈 칸까지 채우고, 연도(Set)를 골랐으면 그 해만 (계약 실적·통합 실적) */
