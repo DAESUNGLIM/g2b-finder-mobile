@@ -651,6 +651,7 @@ async function boot() {
   initPerfSort();
   $('#pfMine').addEventListener('click', addMyCorpsToPerf);
   $('#pfFetch').addEventListener('click', () => fetchCorpFromG2B());
+  $('#pfPdf').addEventListener('click', printPerf);
   initDtilPicker();
   ['#pfPeriod', '#pfInsttN'].forEach((id) => $(id).addEventListener('change', () => loadPerf()));
 
@@ -675,6 +676,7 @@ async function boot() {
     loadCtCover();
   }
   applyBiz();
+  $('#pfPdf').hidden = state.mobile; // 휴대폰 앱에서는 인쇄 창이 뜨지 않는다
   if (state.viewer) {
     $('#pfFetch').textContent = '관리자에게 가져오기 요청';
     $('#pfFetch').title =
@@ -3354,7 +3356,7 @@ function verticalBars(el, cats, series, by) {
     }
   });
   svg += `<line class="axis" x1="${padL}" x2="${W}" y1="${y(0)}" y2="${y(0)}"/>`;
-  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="기간별 실적">${svg}</svg>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="기간별 실적">${svg}</svg>`;
   bindVizTip(el);
 }
 
@@ -3669,6 +3671,78 @@ function renderPerfSummary(byBiz, itemRows, total, listing, locs = {}, condDtils
     if (open.has(tb.dataset.biz)) tb.classList.add('open');
     tb.querySelector('.pf-toggle')?.addEventListener('click', () => tb.classList.toggle('open'));
   });
+}
+
+/* ── 실적: PDF 로 저장 ── */
+
+/** A4 에서 여백을 뺀 폭 (CSS px) — 세로 186mm, 가로 273mm */
+const PRINT_W = { portrait: 700, landscape: 1030 };
+
+/**
+ * 업체 실적을 A4 에 맞춰 인쇄한다 — 인쇄 창의 대상에서 "PDF로 저장" 을 고르면 PDF 가 된다.
+ * 입력 칸·버튼은 빼고 맨 위에 조건(업체·기간·세부품명…)을 적는다. 차트는 쪽 폭으로 다시 그리고,
+ * 표가 세로 쪽에 안 들어가면 가로로 찍는다. 다크 모드여도 흰 바탕으로 찍는다.
+ */
+function printPerf() {
+  if (!perf.view.length || !$('#pfSummary tbody')) return alert('먼저 업체를 추가하거나 조건을 넣어 집계해 주세요.');
+  const sel = (id) => $(id).selectedOptions[0]?.textContent.trim() || '';
+  const period = perf.years.size ? [...perf.years].sort().join(', ') + '년' : `${ymd(dateVal('#mFrom'))} ~ ${ymd(dateVal('#mTo'))}`;
+  const manual = perf.view === perf.corps;
+  const shown = perf.view.slice(0, 10).map((c) => esc(c.name)).join(', ') + (perf.view.length > 10 ? ` 외 ${n(perf.view.length - 10)}곳` : '');
+  const cond = [
+    ['세부품명', '#pfCondDtil'],
+    ['업체소재지', '#pfCondLoc'],
+    ['기관지역', '#pfCondRgn'],
+  ]
+    .map(([k, id]) => [k, $(id).value.trim()])
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k} ${esc(v)}`);
+  if (!$('#pfScopeBox').hidden) cond.push(sel('#pfScope'));
+  const now = new Date(Date.now() + 9 * 3600e3).toISOString();
+  const rows = [
+    ['업체', (manual ? '' : `조건에 맞는 상위 ${n(perf.view.length)}곳 — `) + shown],
+    ['기간', period],
+    ...(cond.length ? [['조건', cond.join(' · ')]] : []),
+  ];
+  $('#pfPrintHead').innerHTML =
+    `<h1>업체 실적</h1><table class="ph">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>` +
+    `<div class="muted small">G2B Finder · 저장된 쇼핑몰 납품요구 거래내역 기준 · ${now.slice(0, 10)} ${now.slice(11, 16)} 출력</div>`;
+  $('#pfPrintPeriod').textContent = `(${sel('#pfPeriod')} · ${perf.dtils.length ? perf.dtils.join(', ') : '전체 품목'})`;
+  $('#pfPrintInsttN').textContent = $('#pfInsttN').value === '0' ? ' (전체)' : ' ' + $('#pfInsttN').value;
+
+  // 표로 보기를 펼치고, 차트를 쪽 폭으로 다시 그린다 — 다 찍은 뒤 되돌린다
+  const details = $('#tab-mine details.viz-table');
+  const wasOpen = details.open;
+  details.open = true;
+  const theme = document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = 'light';
+  const title = document.title;
+  document.title = `업체 실적 ${perf.view.slice(0, 2).map((c) => c.name).join('·')}${perf.view.length > 2 ? ` 외 ${perf.view.length - 2}곳` : ''} ${period.replace(/-/g, '.')}`;
+  const fit = (dir) => {
+    document.body.style.setProperty('--print-w', PRINT_W[dir] + 'px');
+    $('#printPage').textContent = `@page { size: A4 ${dir}; margin: 12mm; }`;
+    if (perf.last) renderPeriod(false);
+  };
+  if (!$('#printPage')) document.head.insertAdjacentHTML('beforeend', '<style id="printPage"></style>');
+  document.body.classList.add('pf-printing');
+  fit('portrait');
+  // 인쇄 글씨(9.5px)는 화면(13px)의 3/4 쯤 — 그만큼 줄여도 세로 쪽 폭을 넘는 표가 있으면 가로로
+  const widest = Math.max(...$$('#tab-mine table').map((t) => t.scrollWidth));
+  if (widest * 0.75 > PRINT_W.portrait) fit('landscape');
+
+  let done = false;
+  const restore = () => {
+    if (done) return;
+    done = true;
+    document.body.classList.remove('pf-printing');
+    details.open = wasOpen;
+    document.documentElement.dataset.theme = theme;
+    document.title = title;
+    if (perf.last) renderPeriod(false);
+  };
+  window.addEventListener('afterprint', restore, { once: true });
+  window.print();
+  setTimeout(restore, 500); // afterprint 가 안 오는 브라우저
 }
 
 /* ── 실적: 조달청에서 업체 가져오기 ── */

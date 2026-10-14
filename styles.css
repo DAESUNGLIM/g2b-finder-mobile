@@ -102,6 +102,9 @@ nav .g-cnstwk { --g: var(--g-cnstwk); }
 nav .g-servc { --g: var(--g-servc); }
 nav .g-int { --g: var(--g-int); }
 #ipSummary td.num div { white-space: nowrap; }
+/* 인쇄 (업체 실적 PDF로 저장) — 화면에서는 안 보이는 머리말, 인쇄 준비 중에는 차트를 쪽 폭으로 */
+.print-only { display: none; }
+body.pf-printing #tab-mine { width: var(--print-w); }
 /* 통합 실적 기간표 — 묶음(업체·구분)마다 금액·건수 두 칸, 묶음 사이에 세로줄 */
 #ipTable .g { border-left: 1px solid var(--line-soft); }
 #ipTable thead th.grp { text-align: center; }
@@ -510,3 +513,38 @@ button.btn.small { padding: 4px 10px; font-size: 12px; }
 /* 계약 내역 — 묶어 보기에서 누르면 그 업체·기관 목록으로 */
 #ctTable tr.clickable { cursor: pointer; }
 #ctTable tr.clickable:hover td { background: var(--hover, rgba(127,127,127,.08)); }
+
+/* ── 인쇄: 업체 실적 PDF로 저장 (printPerf) — A4, 방향은 printPerf 가 @page 로 정한다 ── */
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { background: #fff; }
+  header, nav, #subnav, #fillBanner, .viz-tip, main > section:not(#tab-mine) { display: none !important; }
+  main { padding: 0; max-width: none; }
+  #tab-mine { width: auto !important; }
+  #tab-mine .print-only { display: block; }
+  #tab-mine span.print-only { display: inline; }
+  #pfPrintHead + h2,
+  #tab-mine .row, #tab-mine #mineNotice, #tab-mine #pfFetchResult, #tab-mine .chips,
+  #tab-mine .card-head select, #tab-mine details > summary, #tab-mine tr.pf-toggle { display: none !important; }
+  #pfPrintHead h1 { font-size: 17px; margin: 0 0 8px; }
+  #pfPrintHead table.ph { width: auto; font-size: 11px; margin-bottom: 4px; }
+  #pfPrintHead table.ph th { text-align: left; color: var(--muted); font-weight: 600; padding: 2px 14px 2px 0; vertical-align: top; white-space: nowrap; }
+  #pfPrintHead table.ph td { padding: 2px 0; }
+  #pfPrintHead table.ph th, #pfPrintHead table.ph td { border: 0; }
+  #pfPrintHead > .small { margin-bottom: 12px; }
+  #tab-mine .card { box-shadow: none; border: 0; border-radius: 0; padding: 0; margin: 0 0 16px; }
+  #tab-mine .card-head { margin-bottom: 6px; break-after: avoid; }
+  #tab-mine .card-head h2 { font-size: 13px; }
+  #tab-mine .tablewrap { overflow: visible; border: 1px solid var(--line); border-radius: 0; margin-top: 6px !important; }
+  #tab-mine table { font-size: 9.5px; }
+  #tab-mine table .small { font-size: 0.9em; } /* 화면의 12px 그대로면 표 글씨보다 커진다 */
+  #tab-mine thead { display: table-header-group; }
+  #tab-mine thead th { position: static; font-size: 9px; padding: 4px 6px; }
+  #tab-mine tbody td, #tab-mine tfoot td { padding: 4px 6px; }
+  #tab-mine tr { break-inside: avoid; }
+  #tab-mine tbody tr:hover { background: none; }
+  #pfSummary tbody tr.pf-more { display: table-row !important; }
+  #tab-mine .viz { overflow: visible; break-inside: avoid; }
+  #tab-mine .viz svg { max-width: 100%; height: auto; }
+  #tab-mine .pf-mc { break-inside: avoid; }
+}
