@@ -2780,14 +2780,16 @@ function renderIpPeriod() {
   vizLegend('#ipLegend', series);
   verticalBars($('#ipChart'), cats, series, by);
   const head = by === 'year' ? '연도' : by === 'quarter' ? '분기' : '월';
+  // 묶음(업체·구분)마다 금액·건수를 따로 칸에 — 한 칸에 붙여 쓰면 건수가 금액의 끝자리처럼 읽힌다
   $('#ipTable').innerHTML =
-    `<thead><tr><th>${head}</th>${series.map((s) => `<th class="num">${swatch(s.slot)}${esc(s.name)}</th>`).join('')}<th class="num">합계</th></tr></thead><tbody>` +
+    `<thead><tr><th rowspan="2">${head}</th>${series.map((s) => `<th colspan="2" class="g grp">${swatch(s.slot)}${esc(s.name)}</th>`).join('')}<th rowspan="2" class="num g">합계</th></tr>` +
+    `<tr>${series.map(() => '<th class="num g">금액</th><th class="num">건수</th>').join('')}</tr></thead><tbody>` +
     cats
       .map((c, ci) => {
         const total = series.reduce((a, s) => a + s.values[ci], 0);
         return `<tr><td>${esc(fmtBucketLabel(by, c))}</td>${series
-          .map((s) => `<td class="num nowrap">${s.values[ci] ? `${n(s.values[ci])} <span class="muted small">${n(s.counts[ci])}건</span>` : '-'}</td>`)
-          .join('')}<td class="num nowrap"><b>${total ? n(total) : '-'}</b></td></tr>`;
+          .map((s) => `<td class="num nowrap g">${s.values[ci] ? n(s.values[ci]) : '-'}</td><td class="num nowrap cnt">${s.counts[ci] ? n(s.counts[ci]) : '-'}</td>`)
+          .join('')}<td class="num nowrap g"><b>${total ? n(total) : '-'}</b></td></tr>`;
       })
       .join('') +
     '</tbody>';

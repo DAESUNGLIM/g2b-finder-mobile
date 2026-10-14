@@ -102,6 +102,10 @@ nav .g-cnstwk { --g: var(--g-cnstwk); }
 nav .g-servc { --g: var(--g-servc); }
 nav .g-int { --g: var(--g-int); }
 #ipSummary td.num div { white-space: nowrap; }
+/* 통합 실적 기간표 — 묶음(업체·구분)마다 금액·건수 두 칸, 묶음 사이에 세로줄 */
+#ipTable .g { border-left: 1px solid var(--line-soft); }
+#ipTable thead th.grp { text-align: center; }
+#ipTable td.cnt { color: var(--muted); }
 #ipPick tr.clickable { cursor: pointer; }
 #ipPick tr.clickable:hover { background: var(--panel-2); }
 nav button[class*='g-'] { border-bottom-color: color-mix(in srgb, var(--g) 28%, transparent); }
