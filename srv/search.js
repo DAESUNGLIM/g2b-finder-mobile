@@ -381,10 +381,23 @@ export function aggregateOrders(q = {}) {
     .prepare(
       `SELECT ${g.expr} AS bucket, COUNT(*) cnt, COALESCE(SUM(amt),0) amt,
               COALESCE(SUM(qty),0) qty, COUNT(DISTINCT dlvr_req_no) reqs
+              ${by === 'spec' ? ', MAX(prdct_idnt_no) idnt, MAX(dtil_clsfc_nm) dtil' : ''}
          FROM order_latest ${w.clause()}
         GROUP BY ${g.expr} ORDER BY ${orderBy} LIMIT ?`
     )
     .all(...w.args, limit);
+  // 물품규격명별 — 제품 사진. 거래내역에는 없어 같은 물품식별번호의 쇼핑몰 등록품목(API 로 받은 것만 사진 주소가 있다)에서.
+  // dtils: 금액 큰 세부품명 3개 — 화면이 그 등록품목을 조달청에서 받아 사진을 채운다 (dtilfetch.js)
+  let dtils;
+  if (by === 'spec') {
+    const img = db.prepare(`SELECT img_url FROM product WHERE prdct_idnt_no = ? AND COALESCE(img_url, '') <> '' ORDER BY rgst_date DESC LIMIT 1`);
+    const byDtil = new Map();
+    for (const r of rows) {
+      r.img = r.idnt ? img.get(r.idnt)?.img_url || '' : '';
+      if (r.dtil) byDtil.set(r.dtil, (byDtil.get(r.dtil) || 0) + r.amt);
+    }
+    dtils = [...byDtil].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d]) => d);
+  }
 
   // 비중은 잘린 목록이 아니라 조건 전체 합계를 기준으로 한다 (그 외 묶음도 따로 알려준다).
   const all = db
@@ -402,6 +415,7 @@ export function aggregateOrders(q = {}) {
     totalAmt: all.amt,
     buckets: all.buckets,
     rest: { buckets: all.buckets - rows.length, amt: all.amt - shownAmt, cnt: all.cnt - shownCnt },
+    dtils,
   };
 }
 

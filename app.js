@@ -3014,9 +3014,16 @@ async function renderOrderGroup(q, summary) {
   const max = Math.max(1, ...data.rows.map((r) => r.amt));
   const pct = (v) => (total ? ((v / total) * 100).toFixed(1) : '0.0') + '%';
   const rank = !time;
+  // 물품규격명별은 제품 사진도 — 누르면 크게 (조달청 쇼핑몰 서버에서 바로 불러온다)
+  const pic = by === 'spec';
+  const picCell = (r) =>
+    r.img
+      ? `<td><a href="${esc(r.img)}" target="_blank" rel="noopener noreferrer" title="크게 보기"><img class="spec-img" src="${esc(r.img)}" referrerpolicy="no-referrer" alt=""></a></td>`
+      : '<td><span class="spec-img none">사진 없음</span></td>';
   let html = tableHtml(
     [
       ...(rank ? [{ label: '순위', num: true }] : []),
+      ...(pic ? [{ label: '사진' }] : []),
       { label: data.label },
       { label: '금액', num: true },
       { label: by === 'corp' ? '점유율' : '비중' },
@@ -3027,6 +3034,7 @@ async function renderOrderGroup(q, summary) {
     data.rows,
     (r, i) => `<tr>
       ${rank ? `<td class="num muted">${i + 1}</td>` : ''}
+      ${pic ? picCell(r) : ''}
       <td>${esc(fmtBucket(by, r.bucket))}</td>
       <td class="num nowrap"><b>${n(r.amt)}</b><div class="muted small">${won(r.amt)}원</div></td>
       <td style="min-width:140px">
@@ -3040,11 +3048,48 @@ async function renderOrderGroup(q, summary) {
   );
   if (data.rows.length && data.rest && data.rest.buckets > 0) {
     html += `<tfoot><tr class="muted">
-      ${rank ? '<td></td>' : ''}<td>그 외 ${n(data.rest.buckets)}${by === 'corp' || by === 'instt' ? '곳' : '개'}</td>
+      ${rank ? '<td></td>' : ''}${pic ? '<td></td>' : ''}<td>그 외 ${n(data.rest.buckets)}${by === 'corp' || by === 'instt' ? '곳' : '개'}</td>
       <td class="num nowrap">${n(data.rest.amt)}<div class="small">${won(data.rest.amt)}원</div></td>
       <td class="small">${pct(data.rest.amt)}</td><td class="num">${n(data.rest.cnt)}</td><td></td><td></td></tr></tfoot>`;
   }
   $('#oGroupTable').innerHTML = html;
+  if (pic) ensureSpecImages(data, q, summary);
+}
+
+/**
+ * 물품규격명별 보기의 제품 사진 — 파일로 넣은 등록품목에는 사진이 없어, 금액 큰 세부품명(최대 3개)의 쇼핑몰 등록품목을
+ * 처음 볼 때 조달청에서 한 번 받아 둔다 (세부품명 하나에 보통 3~15회, 30일 동안 다시 부르지 않음). 관리자 PC 에서만.
+ * 한 해 품목이 수만 개인 세부품명(작업용의자 등)은 표에 뜬 모델 가운데 사진이 없는 것만 모델 코드로 받는다 (모델 하나에 1~2회).
+ */
+const specImgTried = new Set();
+async function ensureSpecImages(data, q, summary) {
+  if (state.viewer || state.mobile || data.rows.every((r) => r.img)) return;
+  const todo = (data.dtils || []).filter((d) => !specImgTried.has(d));
+  if (!todo.length) return;
+  const hint = $('#oViewHint');
+  const before = hint.textContent;
+  let added = 0;
+  for (const d of todo) {
+    specImgTried.add(d);
+    hint.textContent = `제품 사진을 조달청에서 받는 중… (${d})`;
+    try {
+      const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await post('/products/dtilfetch', { dtil: d });
+      added += r.items || 0;
+      if (r.big) {
+        const specs = data.rows.filter((x) => !x.img && x.dtil === d).map((x) => x.bucket);
+        if (specs.length) {
+          hint.textContent = `제품 사진을 조달청에서 받는 중… (${d} 모델 ${specs.length}개)`;
+          added += (await post('/products/specfetch', { specs })).items || 0;
+        }
+      }
+    } catch (err) {
+      hint.textContent = `제품 사진을 받지 못했습니다 — ${err.message}`;
+      return;
+    }
+  }
+  hint.textContent = before;
+  if (added && orderView() === 'spec') renderOrderGroup(q, summary);
 }
 
 /** 묶어 보기 결과를 CSV 로 (엑셀에서 바로 열리게 UTF-8 BOM) */
