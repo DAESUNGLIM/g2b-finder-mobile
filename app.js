@@ -625,6 +625,7 @@ async function boot() {
   initThumbPreview('#pTable');
   initThumbPreview('#cmpTable');
   initThumbPreview('#bTable');
+  initThumbPreview('#oGroupTable');
   $('#pReset').addEventListener('click', () => {
     ['#pKeyword', '#pClsfc', '#pDtil', '#pCorp', '#pLoc', '#pIdnt', '#pMin', '#pMax'].forEach((id) => ($(id).value = ''));
     ['#pMas', '#pExclc', '#pSme', '#pMine', '#pOld'].forEach((id) => ($(id).checked = false));
@@ -1938,7 +1939,7 @@ function initThumbPreview(scope) {
     pop.hidden = false;
     const r = t.getBoundingClientRect();
     const h = pop.offsetHeight;
-    pop.style.left = Math.min(r.right + 10, innerWidth - pop.offsetWidth - 8) + 'px';
+    pop.style.left = Math.max(8, Math.min(r.right + 10, innerWidth - pop.offsetWidth - 8)) + 'px'; // 창이 좁아도 화면 밖으로 나가지 않게
     pop.style.top = Math.max(8, Math.min(r.top + r.height / 2 - h / 2, innerHeight - h - 8)) + 'px';
   });
   $(scope).addEventListener('mouseout', (e) => {
@@ -3014,12 +3015,9 @@ async function renderOrderGroup(q, summary) {
   const max = Math.max(1, ...data.rows.map((r) => r.amt));
   const pct = (v) => (total ? ((v / total) * 100).toFixed(1) : '0.0') + '%';
   const rank = !time;
-  // 물품규격명별은 제품 사진도 — 누르면 크게 (조달청 쇼핑몰 서버에서 바로 불러온다)
+  // 물품규격명별은 제품 사진도 — 등록품목 탭과 같이 올리면 크게, 누르면 원본 (조달청 쇼핑몰 서버에서 바로 불러온다)
   const pic = by === 'spec';
-  const picCell = (r) =>
-    r.img
-      ? `<td><a href="${esc(r.img)}" target="_blank" rel="noopener noreferrer" title="크게 보기"><img class="spec-img" src="${esc(r.img)}" referrerpolicy="no-referrer" alt=""></a></td>`
-      : '<td><span class="spec-img none">사진 없음</span></td>';
+  const picCell = (r) => `<td>${productThumb({ img_url: r.img }).replace('class="thumb', 'class="thumb mid')}</td>`;
   let html = tableHtml(
     [
       ...(rank ? [{ label: '순위', num: true }] : []),
