@@ -483,9 +483,9 @@
       <button class="btn" id="pfPdf" type="button" title="지금 보이는 업체 실적(요약표·기간별 실적·수요기관)을 A4 에 맞춰 인쇄합니다. 인쇄 창의 대상에서 &quot;PDF로 저장&quot; 을 고르면 PDF 파일이 됩니다. 표가 넓으면 가로 방향으로 맞춥니다.">PDF로 저장</button>
     </div>
     <div class="row pf-cond" style="margin-top: 10px">
-      <div><label class="f">세부품명</label><input type="text" id="pfCondDtil" placeholder="예) 차양" /></div>
-      <div><label class="f">업체소재지</label><input type="text" id="pfCondLoc" placeholder="예) 대구, 경기도 화성시" /></div>
-      <div><label class="f">기관지역 <span class="muted">(납품한 곳)</span></label><input type="text" id="pfCondRgn" placeholder="예) 서울특별시" /></div>
+      <div><label class="f">세부품명</label><input type="text" id="pfCondDtil" placeholder="예) 차양 — 여러 개 가능" /></div>
+      <div><label class="f">업체소재지</label><input type="text" id="pfCondLoc" placeholder="예) 대구 — 여러 개 가능" /></div>
+      <div><label class="f">기관지역 <span class="muted">(납품한 곳)</span></label><input type="text" id="pfCondRgn" placeholder="예) 서울특별시 — 여러 개 가능" /></div>
       <div>
         <label class="f">업체를 안 고르면</label>
         <select id="pfTopN" title="업체를 추가하지 않고 조건만 넣으면, 조건에 맞는 업체를 금액 큰 순으로 이만큼 보여줍니다. 차트는 상위 7곳만 따로 그리고 나머지는 &quot;그 외&quot; 로 합칩니다.">
@@ -499,6 +499,7 @@
       </div>
       <button class="btn" id="pfCondClear" type="button">조건 지우기</button>
     </div>
+    <div class="row cond-chips" id="pfCondChips" hidden></div>
     <div id="pfFetchResult"></div>
     <div class="chips" id="pfChips" style="margin-top: 10px"></div>
     <div class="row pf-sort" id="pfSortRow" hidden>

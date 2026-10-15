@@ -503,6 +503,11 @@ button.btn.small { padding: 4px 10px; font-size: 12px; }
 .corp-chip .x.pin { font-size: 12px; }
 .corp-chip .x.pin:hover { color: var(--brand); }
 .pf-cond > div { min-width: 170px; }
+/* 업체 실적 조건 꼬리표 — 칸마다 묶어서 */
+.cond-chips { margin-top: 8px; gap: 6px 16px; }
+.cond-group { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.cond-group > .small { margin-right: 2px; }
+.cond-chip { padding: 2px 4px 2px 9px; font-size: 12.5px; }
 /* 기간 그래프 두 줄 축: 연도 글자와 해가 바뀌는 곳의 세로선 */
 .viz svg .tick.year { fill: var(--text); font-weight: 600; }
 .viz svg .yearsep { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }

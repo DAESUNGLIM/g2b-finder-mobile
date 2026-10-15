@@ -3689,14 +3689,9 @@ function printPerf() {
   const period = perf.years.size ? [...perf.years].sort().join(', ') + '년' : `${ymd(dateVal('#mFrom'))} ~ ${ymd(dateVal('#mTo'))}`;
   const manual = perf.view === perf.corps;
   const shown = perf.view.slice(0, 10).map((c) => esc(c.name)).join(', ') + (perf.view.length > 10 ? ` 외 ${n(perf.view.length - 10)}곳` : '');
-  const cond = [
-    ['세부품명', '#pfCondDtil'],
-    ['업체소재지', '#pfCondLoc'],
-    ['기관지역', '#pfCondRgn'],
-  ]
-    .map(([k, id]) => [k, $(id).value.trim()])
-    .filter(([, v]) => v)
-    .map(([k, v]) => `${k} ${esc(v)}`);
+  const cond = Object.keys(PF_COND_INPUTS)
+    .filter((k) => pfCondVals[k].length)
+    .map((k) => `${PF_COND_LABELS[k]} ${pfCondVals[k].map(esc).join(', ')}`);
   if (!$('#pfScopeBox').hidden) cond.push(sel('#pfScope'));
   const now = new Date(Date.now() + 9 * 3600e3).toISOString();
   const rows = [
@@ -3945,36 +3940,99 @@ async function initYearPicker() {
 /* ── 실적: 검색 조건 (세부품명·업체소재지·기관지역) ── */
 
 const PF_COND_INPUTS = { fDtil: '#pfCondDtil', corpLoc: '#pfCondLoc', rgn: '#pfCondRgn' };
+const PF_COND_LABELS = { fDtil: '세부품명', corpLoc: '업체소재지', rgn: '기관지역' };
+/** 조건 칸마다 고를 수 있는 값 수 */
+const PF_COND_MAX = 5;
+/** 조건 칸마다 고른 값 — 같은 칸끼리는 '또는', 칸끼리는 '그리고' */
+const pfCondVals = { fDtil: [], corpLoc: [], rgn: [] };
 
+/** 서버에 보낼 조건 — 여러 값은 '|' 로 잇는다 (세부품명 이름에 쉼표가 든 것이 있어서) */
 function perfCond() {
   const c = {};
-  for (const [k, id] of Object.entries(PF_COND_INPUTS)) c[k] = $(id).value.trim();
+  for (const k of Object.keys(PF_COND_INPUTS)) c[k] = pfCondVals[k].join('|');
   return c;
+}
+
+function savePfCond() {
+  try {
+    localStorage.setItem('perfCond', JSON.stringify({ ...pfCondVals, topN: $('#pfTopN').value }));
+  } catch {}
+}
+
+/** 조건 칸 아래 꼬리표 — 칸마다 고른 값, × 로 하나씩 뺀다 */
+function renderPfCond() {
+  const box = $('#pfCondChips');
+  const keys = Object.keys(PF_COND_INPUTS).filter((k) => pfCondVals[k].length);
+  box.hidden = !keys.length;
+  box.innerHTML = keys
+    .map(
+      (k) =>
+        `<span class="cond-group"><span class="muted small">${PF_COND_LABELS[k]}</span>${pfCondVals[k]
+          .map((v, i) => `<span class="corp-chip cond-chip">${esc(v)}<button class="x" type="button" data-k="${k}" data-i="${i}" title="빼기">×</button></span>`)
+          .join('')}</span>`
+    )
+    .join('');
+  $$('.x', box).forEach((b) =>
+    b.addEventListener('click', () => {
+      pfCondVals[b.dataset.k].splice(Number(b.dataset.i), 1);
+      renderPfCond();
+      savePfCond();
+      loadPerf();
+    })
+  );
+  for (const [k, id] of Object.entries(PF_COND_INPUTS)) {
+    const input = $(id);
+    input.dataset.ph ||= input.placeholder;
+    input.placeholder = pfCondVals[k].length >= PF_COND_MAX ? `${PF_COND_MAX}개까지 고를 수 있습니다` : pfCondVals[k].length ? '하나 더 넣기' : input.dataset.ph;
+  }
+}
+
+/** 칸에 넣은 글자를 꼬리표로 옮긴다 — 바뀌었으면 true */
+function addPfCond(k) {
+  const input = $(PF_COND_INPUTS[k]);
+  const v = input.value.trim();
+  input.value = '';
+  if (!v || pfCondVals[k].includes(v)) return false;
+  if (pfCondVals[k].length >= PF_COND_MAX) {
+    alert(`${PF_COND_LABELS[k]}은(는) ${PF_COND_MAX}개까지 고를 수 있습니다. 꼬리표의 × 로 하나를 뺀 뒤 넣어 주세요.`);
+    return false;
+  }
+  pfCondVals[k].push(v);
+  renderPfCond();
+  savePfCond();
+  return true;
 }
 
 function initPerfCond() {
   try {
     const saved = JSON.parse(localStorage.getItem('perfCond') || '{}');
-    for (const [k, id] of Object.entries(PF_COND_INPUTS)) $(id).value = saved[k] || '';
+    // 예전에는 칸마다 글자 하나였다 — 그 값은 꼬리표 하나로 옮긴다
+    for (const k of Object.keys(PF_COND_INPUTS)) {
+      const v = saved[k];
+      pfCondVals[k] = (Array.isArray(v) ? v : String(v || '').split('|')).map((s) => String(s).trim()).filter(Boolean).slice(0, PF_COND_MAX);
+    }
     if (saved.topN && $(`#pfTopN option[value="${saved.topN}"]`)) $('#pfTopN').value = saved.topN;
   } catch {}
-  const save = () => {
-    try {
-      localStorage.setItem('perfCond', JSON.stringify({ ...perfCond(), topN: $('#pfTopN').value }));
-    } catch {}
-  };
+  renderPfCond();
+  // 업체소재지·기관지역 자동완성은 세부품명을 하나만 골랐을 때 그 품목 거래 안에서 찾는다
+  const oneDtil = () => (pfCondVals.fDtil.length === 1 ? pfCondVals.fDtil[0] : '');
   attachItemSuggest($('#pfCondDtil'), () => 'dtil');
-  attachOrderSuggest($('#pfCondLoc'), 'corpLoc', () => $('#pfCondDtil').value.trim());
-  attachOrderSuggest($('#pfCondRgn'), 'rgn', () => $('#pfCondDtil').value.trim());
-  // 자동완성에서 고르거나 칸을 벗어나면 change, Enter 로도 바로 집계
-  Object.values(PF_COND_INPUTS).forEach((id) => {
-    $(id).addEventListener('change', () => (save(), loadPerf()));
-    $(id).addEventListener('keydown', (e) => e.key === 'Enter' && (save(), loadPerf()));
-  });
-  $('#pfTopN').addEventListener('change', () => (save(), loadPerf()));
+  attachOrderSuggest($('#pfCondLoc'), 'corpLoc', oneDtil);
+  attachOrderSuggest($('#pfCondRgn'), 'rgn', oneDtil);
+  // 자동완성에서 고르거나(change) Enter 를 치면 꼬리표로 붙이고 바로 집계 — 칸은 비워 다음 값을 받는다
+  for (const [k, id] of Object.entries(PF_COND_INPUTS)) {
+    const commit = () => addPfCond(k) && loadPerf();
+    $(id).addEventListener('change', commit);
+    $(id).addEventListener('keydown', (e) => e.key === 'Enter' && commit());
+  }
+  $('#pfTopN').addEventListener('change', () => (savePfCond(), loadPerf()));
   $('#pfCondClear').addEventListener('click', () => {
-    Object.values(PF_COND_INPUTS).forEach((id) => ($(id).value = ''));
-    save();
+    for (const [k, id] of Object.entries(PF_COND_INPUTS)) {
+      pfCondVals[k] = [];
+      $(id).value = '';
+    }
+    renderPfCond();
+    savePfCond();
     loadPerf();
   });
 }
@@ -3986,6 +4044,7 @@ function initPerfCond() {
  *   null   : 확인하지 않는다 (채운 뒤 다시 그릴 때)
  */
 async function loadPerf(fillMode = 'ask') {
+  Object.keys(PF_COND_INPUTS).forEach(addPfCond); // 칸에 쳐 두고 Enter 를 안 친 글자도 조건으로
   const cond = perfCond();
   const hasCond = Object.values(cond).some(Boolean);
   const period0 = { from: dateVal('#mFrom'), to: dateVal('#mTo'), years: [...perf.years].join(','), ...cond };

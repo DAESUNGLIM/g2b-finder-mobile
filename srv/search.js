@@ -27,10 +27,28 @@ export function isDtilName(t) {
       db.prepare('SELECT 1 FROM product WHERE dtil_clsfc_nm = ? LIMIT 1').get(t)
   );
 }
+/**
+ * 조건 칸 하나에 고른 여러 값 — 화면(업체 실적)이 '|' 로 이어 보낸다.
+ * 쉼표는 못 쓴다: 세부품명 가운데 이름에 쉼표가 든 것이 있다 ("견과목종자,묘목,꺽꽃이용삽수" 등 17개).
+ */
+const multi = (v) => [...new Set(String(v ?? '').split('|').map((s) => s.trim()).filter(Boolean))].slice(0, 10);
+
+/** 세부품명 조건 — 값마다 이름 그대로면 같은 이름, 일부면 그 글자가 든 이름. 여러 값은 하나라도 맞으면 */
 function dtilWhere(w, value) {
-  const t = String(value ?? '').trim();
-  if (!t) return w;
-  return isDtilName(t) ? w.add('dtil_clsfc_nm = ?', t) : w.add('dtil_clsfc_nm LIKE ?', like(t));
+  const vals = multi(value);
+  if (!vals.length) return w;
+  const names = vals.filter((v) => isDtilName(v));
+  const sql = names.length ? [names.length === 1 ? 'dtil_clsfc_nm = ?' : `dtil_clsfc_nm IN (${names.map(() => '?').join(',')})`] : [];
+  const parts = vals.filter((v) => !isDtilName(v));
+  for (const _ of parts) sql.push('dtil_clsfc_nm LIKE ?');
+  return w.add(sql.length > 1 ? `(${sql.join(' OR ')})` : sql[0], ...names, ...parts.map(like));
+}
+
+/** 여러 값 가운데 하나라도 글자가 들어 있으면 — 업체소재지·기관지역 조건 */
+function anyLike(w, value, col) {
+  const vals = multi(value);
+  if (!vals.length) return w;
+  return w.add(vals.length > 1 ? `(${vals.map(() => `${col} LIKE ?`).join(' OR ')})` : `${col} LIKE ?`, ...vals.map(like));
 }
 
 /**
@@ -49,14 +67,19 @@ export function pdBucket(dtil) {
 
 /** 세부품명 조건(일부만 넣어도 됨)에 드는 세부품명 이름들 — dtilWhere 와 같은 규칙, 이름은 물품분류 목록에서 */
 export function dtilNamesFor(term) {
-  const t = String(term ?? '').trim();
-  if (!t) return [];
-  if (isDtilName(t)) return [t];
-  try {
-    return db.prepare(`SELECT DISTINCT name FROM clsfc WHERE kind = 'dtil' AND name LIKE ? LIMIT 300`).all(like(t)).map((r) => r.name);
-  } catch {
-    return [];
+  const out = new Set();
+  for (const t of multi(term)) {
+    if (isDtilName(t)) {
+      out.add(t);
+      continue;
+    }
+    try {
+      for (const r of db.prepare(`SELECT DISTINCT name FROM clsfc WHERE kind = 'dtil' AND name LIKE ? LIMIT 300`).all(like(t))) out.add(r.name);
+    } catch {
+      /* 물품분류 목록이 없으면 빈 목록 */
+    }
   }
+  return [...out].slice(0, 300);
 }
 
 /** WHERE 절과 바인딩 값을 같이 모아주는 작은 헬퍼 */
@@ -666,6 +689,7 @@ function perfYears(q) {
  *   fDtil   : 세부품명 (일부만 넣어도 됨)
  *   corpLoc : 업체소재지 (corp_info)
  *   rgn     : 수요기관 지역 (납품한 곳)
+ * 칸마다 여러 값을 '|' 로 이어 받는다 — 같은 칸끼리는 '또는', 칸끼리는 '그리고'.
  */
 function perfWhere(q, years = perfYears(q)) {
   const c = where();
@@ -678,8 +702,9 @@ function perfWhere(q, years = perfYears(q)) {
     c.add(`substr(rcpt_date, 1, 4) IN (${years.map(() => '?').join(',')})`, ...years);
   }
   dtilWhere(c, q.fDtil);
-  c.maybe(q.corpLoc, 'corp_bizno IN (SELECT bizno FROM corp_info WHERE loc LIKE ?)', like);
-  c.maybe(q.rgn, 'dminstt_rgn LIKE ?', like);
+  const locs = multi(q.corpLoc);
+  if (locs.length) c.add(`corp_bizno IN (SELECT bizno FROM corp_info WHERE ${locs.map(() => 'loc LIKE ?').join(' OR ')})`, ...locs.map(like));
+  anyLike(c, q.rgn, 'dminstt_rgn');
   return c;
 }
 
@@ -724,7 +749,7 @@ export function perfTop(q = {}) {
   if (limit === -1 && !String(q.rgn || '').trim()) {
     const lw = where();
     dtilWhere(lw, q.fDtil);
-    lw.maybe(q.corpLoc, `COALESCE(NULLIF(hdoffce, ''), ci.loc, '') LIKE ?`, like);
+    anyLike(lw, q.corpLoc, `COALESCE(NULLIF(hdoffce, ''), ci.loc, '')`);
     lw.add("COALESCE(corp_bizno, '') <> ''");
     const have = new Set(rows.map((r) => r.bizno));
     const extra = db
