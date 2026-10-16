@@ -2038,7 +2038,7 @@ async function loadContractStatus() {
   const more = !s.running && s.pending > 0;
   el.innerHTML =
     `<span class="muted">${parts.join(' · ')}</span>${tail}` +
-    (more ? ' <button class="btn small" id="ctSync" title="3시간을 기다리지 않고 지금 이어 받습니다">지금 이어 받기</button>' : '');
+    (more ? ' <button class="btn small" id="ctSync" title="밀린 날을 기다리지 않고 지금 이어 받습니다">지금 이어 받기</button>' : '');
   if (more) {
     $('#ctSync').addEventListener('click', async () => {
       await api('/contracts/sync', { method: 'POST' });
