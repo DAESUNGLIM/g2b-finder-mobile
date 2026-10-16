@@ -24,8 +24,6 @@ export function publicSettings() {
     baseUrl: '',
     myCorps: myCorps(),
     dailyLimit: 0,
-    autoFill: false,
-    autoFillMaxDays: 31,
     learned: {},
   };
 }

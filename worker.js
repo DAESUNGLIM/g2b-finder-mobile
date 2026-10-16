@@ -521,7 +521,7 @@ async function route(method, url, body) {
     const filters = {};
     if (q.dtil) filters.dtilPrdctClsfcNoNm = q.dtil;
     const key = cov.filterKey(ds, filters);
-    const m = cov.missingDays(ds.id, from, to, cov.acceptKeys(key));
+    const m = cov.missingDays(ds.id, from, cov.capSettled(to), cov.acceptKeys(key));
     return {
       dataset: ds.id,
       from: m.from,
@@ -551,8 +551,9 @@ async function route(method, url, body) {
   if (path === '/perf/corps' && method === 'GET') return store.suggestCorps(q.term, q.limit);
   if (path === '/perf/fillplan' && method === 'GET') {
     const from = String(q.from || '').replace(/[^0-9]/g, '');
-    const to = String(q.to || '').replace(/[^0-9]/g, '');
-    if (from.length !== 8 || to.length !== 8) throw new HttpError(400, 'from/to 를 YYYYMMDD 로 지정하세요.');
+    const to0 = String(q.to || '').replace(/[^0-9]/g, '');
+    if (from.length !== 8 || to0.length !== 8) throw new HttpError(400, 'from/to 를 YYYYMMDD 로 지정하세요.');
+    const to = cov.capSettled(to0);
     const biznos = String(q.biznos || '').split(',').map((b) => b.replace(/[^0-9]/g, '')).filter(Boolean);
     const years = String(q.years || '').split(',').filter((y) => /^\d{4}$/.test(y)).sort();
     const ranges = years.length

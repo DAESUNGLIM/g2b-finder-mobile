@@ -168,6 +168,9 @@ function requireProductScope(pq, clearIds) {
  *   'auto' : 사용자가 검색 버튼을 눌렀을 때 — 설정·한도 안이면 바로 받는다
  *   'ask'  : 탭을 열었을 때 — 알리기만 하고 버튼으로 물어본다
  */
+/** 거래내역 검색에서 빠진 날짜가 이보다 많으면 저절로 받지 않고 버튼으로 묻는다 (예상 호출 수가 오늘 남은 한도를 넘어도) */
+const AUTO_FILL_DAYS = 31;
+
 async function ensureCoverage({ from, to, dtil, mode, rerun }) {
   const dataset = 'dlvrDtl';
   if (!from || !to) return fillBanner('', '');
@@ -234,7 +237,6 @@ async function ensureCoverage({ from, to, dtil, mode, rerun }) {
     });
     return;
   }
-  const s = state.settings;
   const est = cov.estCalls;
   const estText = cov.mock ? '샘플 모드라 API 호출 없음' : est == null ? '예상 호출 수는 첫 수집 뒤부터 계산됩니다' : `예상 API 약 ${n(est)}회 · 오늘 남은 ${n(cov.remainingCalls)}회`;
   const what = `${ymd(cov.from)} ~ ${ymd(cov.to)} 가운데 <b>${n(cov.missingDays)}일치</b>가 아직 저장되지 않았습니다 <span class="small muted">(${estText})</span>`;
@@ -243,7 +245,7 @@ async function ensureCoverage({ from, to, dtil, mode, rerun }) {
     return fillBanner('warn', `${what}<br><span class="small">다른 수집이 진행 중입니다. 끝난 뒤 다시 검색하면 채워집니다.</span>`);
   }
 
-  const overDays = cov.missingDays > (s.autoFillMaxDays || 31);
+  const overDays = cov.missingDays > AUTO_FILL_DAYS;
   const overQuota = !cov.mock && est != null && est > cov.remainingCalls;
   const doFill = async () => {
     fillBanner('', `${what}<br>빠진 날짜만 받는 중…`);
@@ -286,16 +288,14 @@ async function ensureCoverage({ from, to, dtil, mode, rerun }) {
     }
   };
 
-  if (mode === 'auto' && s.autoFill && !overDays && !overQuota) return doFill();
+  if (mode === 'auto' && !overDays && !overQuota) return doFill();
 
   const why =
     mode !== 'auto'
       ? ''
-      : !s.autoFill
-        ? '자동 받기가 꺼져 있습니다.'
-        : overDays
-          ? `자동으로 받는 최대 ${n(s.autoFillMaxDays)}일을 넘습니다.`
-          : '예상 호출 수가 오늘 남은 한도보다 많습니다.';
+      : overDays
+        ? `빠진 날짜가 ${n(AUTO_FILL_DAYS)}일을 넘어 저절로 받지 않았습니다.`
+        : '예상 호출 수가 오늘 남은 한도보다 많습니다.';
   fillBanner(
     'warn',
     `${what}<br><span class="small">${why}</span> <button class="btn primary" id="fillGo">빠진 ${n(cov.missingDays)}일치만 받기</button>`
@@ -656,10 +656,6 @@ async function boot() {
   $('#setMock').addEventListener('change', (e) => save({ forceMock: e.target.checked }));
   $('#setLimitSave').addEventListener('click', () => save({ dailyLimit: Number($('#setLimit').value) }));
   $('#setBaseSave').addEventListener('click', () => save({ baseUrl: $('#setBase').value }));
-  $('#setAutoSave').addEventListener('click', async () => {
-    await save({ autoFill: $('#setAutoFill').checked, autoFillMaxDays: Number($('#setAutoMax').value) });
-    alert('저장했습니다.');
-  });
   $('#corpAdd').addEventListener('click', () => addCorpRow({ name: '', bizno: '' }));
   $('#corpSave').addEventListener('click', saveCorps);
 
@@ -4170,7 +4166,6 @@ async function ensurePerfCoverage(mode, lead = '', ctx = perfFillCtx()) {
   if (plan.collecting) {
     return banner('warn', `${what}<br><span class="small">다른 수집이 진행 중입니다. 끝난 뒤 <b>집계</b>를 누르면 채웁니다.</span>`);
   }
-  const s = state.settings;
   const overQuota = !plan.mock && est > plan.remainingCalls;
 
   const doFill = async () => {
@@ -4221,8 +4216,8 @@ async function ensurePerfCoverage(mode, lead = '', ctx = perfFillCtx()) {
     );
   };
 
-  if (mode === 'auto' && s.autoFill && !overQuota) return doFill();
-  const why = mode !== 'auto' ? '' : !s.autoFill ? '자동 받기가 꺼져 있습니다.' : '예상 호출 수가 오늘 남은 한도보다 많습니다.';
+  if (mode === 'auto' && !overQuota) return doFill();
+  const why = mode !== 'auto' ? '' : '예상 호출 수가 오늘 남은 한도보다 많습니다.';
   banner('warn', `${what}<br><span class="small">${why}</span> <button class="btn primary" id="pfFillGo">빠진 날짜만 받기 (약 ${n(est)}회)</button>`);
   $('#pfFillGo').addEventListener('click', doFill);
 }
@@ -4412,8 +4407,6 @@ async function loadSettings() {
   state.settings = s;
   $('#setMock').checked = s.forceMock;
   $('#setLimit').value = s.dailyLimit;
-  $('#setAutoFill').checked = s.autoFill;
-  $('#setAutoMax').value = s.autoFillMaxDays;
   $('#setBase').value = s.baseUrl;
   $('#setKey').placeholder = s.serviceKeyFromEnv
     ? '.env 의 G2B_SERVICE_KEY 를 쓰는 중입니다'

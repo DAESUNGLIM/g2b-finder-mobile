@@ -29,6 +29,13 @@ export const addDays = (ymd, n) => toYmd(new Date(toDate(ymd).getTime() + n * 86
 /** 한국시간 오늘 / 어제 (YYYYMMDD) */
 export const todayYmd = () => today().replace(/-/g, '');
 export const yesterdayYmd = () => addDays(todayYmd(), -1);
+/**
+ * 확정된 마지막 날 — 그저께. 자동 채우기와 검색할 때 받기는 여기까지만 받는다 (하루 한 번):
+ * 어제 자료를 오늘 받으면 늦게 들어오는 건 때문에 내일 한 번 더 받아야 해서, 이틀 지난 날을 한 번만 받는다.
+ */
+export const settledYmd = () => addDays(todayYmd(), -2);
+/** 검색 기간의 끝을 확정된 마지막 날로 자른다 */
+export const capSettled = (ymd) => (ymd > settledYmd() ? settledYmd() : ymd);
 
 export function daysBetween(bgn, end) {
   const out = [];
