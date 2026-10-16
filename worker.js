@@ -210,12 +210,11 @@ const PK = {
   product: ['dataset', 'cntrct_no', 'cntrct_sno', 'prdct_idnt_no'],
   coverage: ['dataset', 'filter_key', 'day'],
   corp_api: ['bizno'],
-  corp_fetch: ['term'], // 업체 단위로 등록품목을 받아 본 업체 (업체 실적 "전체 품목" 의 빠진 자료 확인)
   clsfc: ['kind', 'code'],
 };
 
 /**
- * 파일로 넣은 쇼핑몰 등록품목과 그 파일로 적은 "등록품목을 받아 본 업체" 는 휴대폰에 두지 않는다
+ * 파일로 넣은 쇼핑몰 등록품목은 휴대폰에 두지 않는다
  * (쇼핑몰 전체 등록 내역은 100만 줄 — PC 의 publish.js buildMobileBase 와 같은 규칙).
  */
 let phoneDtils = null; // 배포 목록의 mobileDtils — 없으면(예전 배포) 거르지 않는다
@@ -229,7 +228,6 @@ function forPhone(t, row) {
     if (t === 'coverage' && row.filter_key === '' && phoneSets.some((id) => String(row.dataset || '').startsWith(id))) return false;
   }
   if (t === 'product') return !String(row.seen_run || '').startsWith('file:');
-  if (t === 'corp_fetch') return row.term !== '*' && !/"file":/.test(String(row.result || ''));
   return true;
 }
 
