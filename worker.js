@@ -214,7 +214,7 @@ const PK = {
 };
 
 /**
- * 파일로 넣은 쇼핑몰 등록품목은 휴대폰에 두지 않는다
+ * 쇼핑몰 전체 등록품목(파일로 넣은 줄 'file:'·전체 품목으로 받은 줄 'all:')은 변경분으로 받지 않고 세부품명 묶음으로 받는다
  * (쇼핑몰 전체 등록 내역은 100만 줄 — PC 의 publish.js buildMobileBase 와 같은 규칙).
  */
 let phoneDtils = null; // 배포 목록의 mobileDtils — 없으면(예전 배포) 거르지 않는다
@@ -227,7 +227,8 @@ function forPhone(t, row) {
     if (t === 'order_head') return phoneDtils.has(row.rprsnt_dtil_nm);
     if (t === 'coverage' && row.filter_key === '' && phoneSets.some((id) => String(row.dataset || '').startsWith(id))) return false;
   }
-  if (t === 'product') return !String(row.seen_run || '').startsWith('file:');
+  // 내려감 표시는 보낸다 — 예전에 변경분으로 받은 같은 줄이 휴대폰에 남아 있으면 그것도 내려가야 하니
+  if (t === 'product') return !/^(file|all):/.test(String(row.seen_run || '')) || Number(row.delisted) === 1;
   return true;
 }
 
@@ -289,7 +290,7 @@ function loadPd(k) {
     d.exec('PRAGMA journal_mode = MEMORY');
     try {
       transaction(() => {
-        d.exec({ sql: `DELETE FROM product WHERE seen_run LIKE 'file:%' AND dtil_clsfc_nm IN (SELECT value FROM json_each(?))`, bind: [JSON.stringify(j.dtils)] });
+        d.exec({ sql: `DELETE FROM product WHERE (seen_run LIKE 'file:%' OR seen_run LIKE 'all:%') AND dtil_clsfc_nm IN (SELECT value FROM json_each(?))`, bind: [JSON.stringify(j.dtils)] });
         // 줄마다 값을 넘기면 느려서(WebAssembly 오가기), 묶음 전체를 JSON 하나로 넘겨 SQLite 가 풀게 한다
         d.exec({
           sql: `INSERT OR REPLACE INTO product(${j.cols.join(',')})
