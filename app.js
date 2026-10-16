@@ -146,17 +146,15 @@ function requireOrderScope(q, clearIds) {
 }
 
 /**
- * 등록품목은 세부품명이나 계약업체 중 하나만 있으면 검색한다.
- * 업체만으로 찾을 때는 저장된 자료에서만 찾고 API 로 받지 않는다 (ensureCoverage 는 세부품명이 있어야 받음).
+ * 등록품목은 세부품명이나 계약업체 중 하나만 있으면 검색한다 (둘 다 없으면 수백만 줄을 다 읽게 된다).
+ * 검색은 저장된 등록품목에서만 찾는다 — 파일로 넣은 전체 목록 뒤로 새로 올라온 품목은 매일 자동 채우기(autofill.js)가 받는다.
  */
 function requireProductScope(pq, clearIds) {
   if (pq.dtil || pq.corp) return true;
   clearIds.forEach((id) => ($(id).innerHTML = ''));
   fillBanner(
     'warn',
-    state.viewer
-      ? '<b>세부품명</b>이나 <b>계약업체</b>를 넣고 검색하세요.'
-      : '<b>세부품명</b>이나 <b>계약업체</b>를 넣고 검색하세요. 둘 다 없이 검색하면 전체 품목을 API 로 받게 되어 하루 한도를 금방 씁니다.'
+    '<b>세부품명</b>이나 <b>계약업체</b>를 넣고 검색하세요.'
   );
   $('#pDtil').focus();
   return false;
@@ -170,12 +168,12 @@ function requireProductScope(pq, clearIds) {
  *   'auto' : 사용자가 검색 버튼을 눌렀을 때 — 설정·한도 안이면 바로 받는다
  *   'ask'  : 탭을 열었을 때 — 알리기만 하고 버튼으로 물어본다
  */
-async function ensureCoverage({ from, to, dtil, mode, rerun, dataset = 'dlvrDtl', ignoreMaxDays = false }) {
+async function ensureCoverage({ from, to, dtil, mode, rerun }) {
+  const dataset = 'dlvrDtl';
   if (!from || !to) return fillBanner('', '');
   if (!dtil) {
     // 세부품명 없이는 API 로 받지 않는다 (전체 품목을 받게 되어 하루 한도를 금방 쓴다) — 저장된 자료로만 보여 주고,
-    // 거래내역이면 전체 품목을 받아 둔 날이 아닌 날이 있는지 알린다
-    if (dataset !== 'dlvrDtl') return;
+    // 전체 품목을 받아 둔 날이 아닌 날이 있는지 알린다
     let all;
     try {
       all = await api('/coverage?' + qs({ dataset, from, to }));
@@ -245,8 +243,7 @@ async function ensureCoverage({ from, to, dtil, mode, rerun, dataset = 'dlvrDtl'
     return fillBanner('warn', `${what}<br><span class="small">다른 수집이 진행 중입니다. 끝난 뒤 다시 검색하면 채워집니다.</span>`);
   }
 
-  // 등록품목은 등록일 기준이라 기간이 길 수밖에 없어 일수 제한 대신 호출 수만 본다.
-  const overDays = !ignoreMaxDays && cov.missingDays > (s.autoFillMaxDays || 31);
+  const overDays = cov.missingDays > (s.autoFillMaxDays || 31);
   const overQuota = !cov.mock && est != null && est > cov.remainingCalls;
   const doFill = async () => {
     fillBanner('', `${what}<br>빠진 날짜만 받는 중…`);
@@ -322,7 +319,7 @@ const state = {
 const TAB_LOADERS = {
   home: loadHome,
   orders: () => searchOrders(1, 'ask'),
-  products: () => searchProducts(1, 'ask'),
+  products: () => searchProducts(1),
   contracts: loadContracts,
   cperf: loadCperf,
   iperf: () => showIperf('ask'),
@@ -621,7 +618,7 @@ async function boot() {
   $('#oKeyword').addEventListener('keydown', (e) => e.key === 'Enter' && searchOrders(1, 'auto'));
   $('#oDtil').addEventListener('keydown', (e) => e.key === 'Enter' && searchOrders(1, 'auto'));
 
-  $('#pSearch').addEventListener('click', () => searchProducts(1, 'auto'));
+  $('#pSearch').addEventListener('click', () => searchProducts(1));
   initThumbPreview('#pTable');
   initThumbPreview('#cmpTable');
   initThumbPreview('#bTable');
@@ -636,9 +633,9 @@ async function boot() {
     if (!requireProductScope(productQuery(), [])) return;
     openExport('/api/export?' + qs({ kind: 'products', ...productQuery() }));
   });
-  $('#pKeyword').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
-  $('#pDtil').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
-  $('#pCorp').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1, 'auto'));
+  $('#pKeyword').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1));
+  $('#pDtil').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1));
+  $('#pCorp').addEventListener('keydown', (e) => e.key === 'Enter' && searchProducts(1));
 
   initContracts();
   initCperf();
@@ -1956,11 +1953,8 @@ function productStatusPill(r) {
   return '';
 }
 
-/**
- * @param {number} page
- * @param {'auto'|'ask'} [fillMode] 있으면 받아 두지 않은 등록품목을 확인한다 (페이지 넘김엔 안 함)
- */
-async function searchProducts(page, fillMode) {
+/** @param {number} page */
+async function searchProducts(page) {
   state.products.page = page;
   const pq = productQuery();
   if (!requireProductScope(pq, ['#pCount', '#pTable', '#pPager'])) return;
@@ -2004,32 +1998,7 @@ async function searchProducts(page, fillMode) {
   );
   bindMarks('#pTable');
   pager('#pPager', data.total, page, state.products.size, (p) => searchProducts(p));
-  if (!pq.dtil) {
-    fillBanner(
-      'warn',
-      `세부품명 없이 업체로 찾아 <b>저장된 등록품목</b>에서만 보여 드립니다.` +
-        (state.viewer
-          ? ' 이 업체의 품목이 빠져 있으면 <b>업체 실적</b> 탭의 <b>조달청에서 가져오기</b>로 요청할 수 있습니다.'
-          : ' 이 업체의 품목이 빠져 있으면 <b>업체 실적</b> 탭의 <b>조달청에서 가져오기</b>로 받을 수 있습니다.')
-    );
-  }
-  // 쇼핑몰 등록품목을 이 세부품명으로 받아 둔 적이 없거나 30일이 지났으면 채운다.
-  // API 가 등록일 기준이라 최근 2년 등록분을 받는다 (세부품명으로 좁혀 31일당 약 1회).
-  if (fillMode && (!pq.dataset || pq.dataset === 'shop')) {
-    ensureCoverage({
-      dataset: 'shop',
-      from: daysAgo(PRODUCT_FILL_DAYS),
-      to: daysAgo(1),
-      dtil: pq.dtil,
-      mode: fillMode,
-      ignoreMaxDays: true,
-      rerun: () => searchProducts(page),
-    });
-  }
 }
-
-/** 등록품목을 자동으로 받을 때 거슬러 올라가는 기간 (등록일 기준) */
-const PRODUCT_FILL_DAYS = 730;
 
 /* ── 계약 내역 (관리자 PC 만 — 조달청 계약정보) ──────────────────── */
 
