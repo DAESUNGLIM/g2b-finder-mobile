@@ -409,7 +409,7 @@ async function uploadShared(link, name, text) {
   if (!r.ok) throw new Error(`요청을 올리지 못했습니다 (${r.status}).`);
 }
 
-async function askFor({ dataset, from, to, dtil, corp }) {
+async function askFor({ dataset, from, to, dtil }) {
   const req = {
     v: 1,
     id: new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14) + Math.random().toString(16).slice(2, 8),
@@ -420,10 +420,7 @@ async function askFor({ dataset, from, to, dtil, corp }) {
     to: String(to || ''),
     dtil: String(dtil || ''),
   };
-  if (req.dataset === 'corp') {
-    req.corp = String(corp || '').trim().slice(0, 60);
-    if (req.corp.length < 2) throw new Error('요청할 업체명을 두 글자 이상 넣어 주세요.');
-  } else if (!/^[0-9]{8}$/.test(req.from) || !/^[0-9]{8}$/.test(req.to) || !req.dtil) {
+  if (!/^[0-9]{8}$/.test(req.from) || !/^[0-9]{8}$/.test(req.to) || !req.dtil) {
     throw new Error('요청할 기간과 세부품명이 있어야 합니다.');
   }
   const sent = state.reqSent || [];
@@ -575,7 +572,7 @@ async function route(method, url, body) {
         jobs.push({ dtil: d.dtil, from: m.days[0], to: m.days.at(-1), missingDays: m.days.length, estCalls: 0, filters, chunkDays: 31 });
       }
     }
-    return { dtils, jobs, unknown: store.corpsNotFetched(q.corps), remainingCalls: 0, mock: false, collecting: false };
+    return { dtils, jobs, remainingCalls: 0, mock: false, collecting: false };
   }
   if (path === '/perf' && method === 'GET') {
     if (q.listing) await ensurePd(q.fDtil).catch(() => {}); // 업체별 "쇼핑몰 등록 N개"

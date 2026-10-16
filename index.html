@@ -464,13 +464,11 @@
         여러 곳을 추가하면 나란히 비교합니다 (최대 10곳).<br>
         업체 없이 <b>세부품명·업체소재지·기관지역</b> 조건만 넣으면 조건에 맞는 상위 업체를 보여줍니다 (<b>전체</b>를 고르면 납품 실적이 없는 쇼핑몰 등록업체까지).<br>
         업체를 추가했으면 그 업체들의 실적을 조건으로 좁혀 봅니다.<br>
-        등록품목이 저장되지 않은 업체는 <b>조달청에서 가져오기</b>(동료 PC 는 <b>관리자에게 가져오기 요청</b>)로 등록품목을 먼저 받습니다.<br>
         그 밖의 검색·집계는 API 를 부르지 않습니다.
       </span></span>
     </h2>
     <div class="row">
       <div style="flex: 1; min-width: 260px"><label class="f">업체 추가</label><input type="text" id="pfSearch" placeholder="업체명 또는 사업자등록번호로 검색" /></div>
-      <button class="btn" id="pfFetch" type="button" title="넣은 업체명으로 조달청에서 그 업체가 지금 쇼핑몰에 올려 둔 등록품목을 받아 저장합니다 (등록일로만 찾을 수 있어 최근 3년을 1년씩 나눠 찾습니다). 한 업체에 조달청 호출 10~20회. 30일 안에 받은 업체는 다시 부르지 않습니다. 거래내역은 업체를 추가하면 그 업체가 등록한 세부품명으로 고른 기간만큼 채웁니다. 동료가 요청한 업체는 올해 거래내역까지 한 번에 받아 줍니다.">조달청에서 가져오기</button>
       <div class="yearpick">
         <label class="f">연도</label>
         <button class="btn" id="pfYearBtn" type="button" title="체크한 해만 집계합니다 (떨어진 해도 고를 수 있음)">연도 선택 ▾</button>
@@ -500,7 +498,6 @@
       <button class="btn" id="pfCondClear" type="button">조건 지우기</button>
     </div>
     <div class="row cond-chips" id="pfCondChips" hidden></div>
-    <div id="pfFetchResult"></div>
     <div class="chips" id="pfChips" style="margin-top: 10px"></div>
     <div class="row pf-sort" id="pfSortRow" hidden>
       <span class="pf-sort-box" id="pfScopeBox" hidden>

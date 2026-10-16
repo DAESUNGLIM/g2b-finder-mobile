@@ -648,7 +648,6 @@ async function boot() {
   initPerfCond();
   initPerfSort();
   $('#pfMine').addEventListener('click', addMyCorpsToPerf);
-  $('#pfFetch').addEventListener('click', () => fetchCorpFromG2B());
   $('#pfPdf').addEventListener('click', printPerf);
   initDtilPicker();
   ['#pfPeriod', '#pfInsttN'].forEach((id) => $(id).addEventListener('change', () => loadPerf()));
@@ -675,11 +674,6 @@ async function boot() {
   }
   applyBiz();
   $('#pfPdf').hidden = state.mobile; // 휴대폰 앱에서는 인쇄 창이 뜨지 않는다
-  if (state.viewer) {
-    $('#pfFetch').textContent = '관리자에게 가져오기 요청';
-    $('#pfFetch').title =
-      '넣은 업체명을 관리자 PC 에 보내면, 관리자 PC 가 조달청에서 그 업체의 쇼핑몰 등록품목과 거래내역을 받아 몇 분 뒤 여기에도 들어옵니다.';
-  }
   await refreshMeta();
   showTab(location.hash.slice(1) || 'home');
 }
@@ -847,7 +841,7 @@ function renderInbox(s) {
         <td><b>${esc(r.dtil)}</b> <span class="small muted">${esc(r.label)}</span>${
           r.note ? `<br><span class="small muted">${esc(r.note)}</span>` : ''
         }</td>
-        <td class="small">${r.dataset === 'corp' ? '<span class="muted">전 기간</span>' : `${ymd(r.day_from)} ~ ${ymd(r.day_to)}`}</td>
+        <td class="small">${ymd(r.day_from)} ~ ${ymd(r.day_to)}</td>
         <td class="small">${ymdhm(r.at || r.got_at)}</td>
         <td style="white-space:nowrap">${
           r.state === 'taking'
@@ -870,18 +864,6 @@ async function onInboxClick(e) {
     if (hide) return renderInbox(await setInboxState(hide, 'hidden'));
     const r = state.inbox.items.find((x) => x.id === take);
     if (!r) return;
-    if (r.dataset === 'corp') {
-      // 업체 가져오기 — 1분 안팎. 결과 요약은 목록의 메모로 남는다
-      e.target.disabled = true;
-      e.target.textContent = '받는 중…';
-      const res = await api('/inbox/take-corp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: take }),
-      });
-      renderInbox(res.status);
-      return refreshMeta();
-    }
     const err = collectFor({ dataset: r.dataset, from: r.day_from, to: r.day_to, dtil: r.dtil });
     if (err) return alert(err);
     renderInbox(await setInboxState(take, 'done'));
@@ -1470,13 +1452,7 @@ function renderImport(list) {
       <td class="num">${n(r.inserted)}</td>
       <td class="num">${n(r.updated)}</td>
       <td class="num">${n(r.keptApi)}</td>
-      <td class="small">${
-        r.corpMarked
-          ? r.whole
-            ? '쇼핑몰 전체 등록 내역으로 기록 (업체 실적 "전체 품목" 이 등록품목 받기를 묻지 않음)'
-            : '업체 전체 등록품목으로 기록 (업체 실적 "전체 품목" 이 다시 받자고 묻지 않음)'
-          : '<span class="muted">-</span>'
-      }</td>
+      <td class="small"><span class="muted">-</span></td>
     </tr>`
           : `<tr>
       <td class="small">${esc(r.file)}</td>
@@ -3752,101 +3728,6 @@ function printPerf() {
   setTimeout(restore, 500); // afterprint 가 안 오는 브라우저
 }
 
-/* ── 실적: 조달청에서 업체 가져오기 ── */
-
-/**
- * 업체명으로 조달청에서 그 업체의 쇼핑몰 등록품목을 받아 저장한다.
- * 넣은 이름과 같은 업체(main)는 바로 비교 목록에 넣고, 그 업체가 등록한 세부품명의 거래내역은
- * loadPerf('auto') 가 고른 기간만큼 채운다 (ensurePerfCoverage).
- */
-async function fetchCorpFromG2B() {
-  const term = $('#pfSearch').value.trim();
-  if (!term) {
-    $('#pfSearch').focus();
-    return notice('#pfFetchResult', 'warn', '가져올 <b>업체명</b>을 업체 추가 칸에 넣어 주세요.');
-  }
-  if (state.viewer) return askCorp(term);
-  const btn = $('#pfFetch');
-  btn.disabled = true;
-  notice('#pfFetchResult', 'info', `조달청에서 <b>${esc(term)}</b> 의 쇼핑몰 등록품목을 받는 중입니다… (30초 안팎)`);
-  const poll = setInterval(async () => {
-    const s = await api('/corpfetch/status').catch(() => null);
-    if (s) notice('#pfFetchResult', 'info', `조달청에서 <b>${esc(term)}</b> 받는 중 — ${esc(s.step)} · 호출 ${n(s.calls)}회`);
-  }, 1500);
-  try {
-    const r = await api('/corpfetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ term }),
-    });
-    perf.fetch = r;
-    for (const c of r.corps) if (c.main) addPerfCorp(c);
-    renderCorpFetch();
-    loadPerf('auto');
-    refreshMeta();
-  } catch (err) {
-    notice('#pfFetchResult', 'warn', esc(err.message));
-  } finally {
-    clearInterval(poll);
-    btn.disabled = false;
-  }
-}
-
-/** 검색 전용 — 조달청을 직접 부를 수 없으니 관리자 PC 에 업체 가져오기를 요청한다 */
-async function askCorp(term) {
-  const btn = $('#pfFetch');
-  btn.disabled = true;
-  try {
-    const r = await api('/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataset: 'corp', corp: term }),
-    });
-    const after = '관리자 PC 가 받으면 몇 분 뒤 이 PC 에도 들어옵니다. 그때 업체 추가 칸에서 이름을 찾아 추가하면, 그 업체가 등록한 세부품명의 거래내역도 요청할 수 있습니다.';
-    if (r.state === 'sent') return notice('#pfFetchResult', 'info', `<b>${esc(term)}</b> 가져오기를 관리자에게 요청했습니다. ${after}`);
-    if (r.state === 'dup') return notice('#pfFetchResult', 'info', `<b>${esc(term)}</b> 은(는) 이미 요청했습니다. ${after}`);
-    notice('#pfFetchResult', 'warn', `요청을 보내지 못했습니다${r.error ? ` — ${esc(r.error)}` : ''}. 관리자에게 <b>${esc(term)}</b> 이(가) 필요하다고 알려 주세요.`);
-  } catch (err) {
-    notice('#pfFetchResult', 'warn', esc(err.message));
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function renderCorpFetch() {
-  const r = perf.fetch;
-  if (!r) return;
-  const when = r.cached ? `${esc(r.fetchedAt.slice(0, 10))} 에 받은 결과 (30일 안에는 다시 부르지 않습니다)` : `조달청 호출 ${n(r.calls)}회`;
-  if (!r.corps.length) {
-    return notice('#pfFetchResult', 'warn', `조달청에 <b>${esc(r.term)}</b> 이름으로 올라온 쇼핑몰 품목(MAS·제3자단가·일반단가, 최근 3년 등록분)이 없습니다. <span class="muted small">${when}</span>`);
-  }
-  const rows = r.corps
-    .map((c) => {
-      const inList = perf.corps.some((x) => x.bizno === c.bizno);
-      return `<tr>
-        <td><b>${esc(c.name)}</b><div class="muted small">${esc(c.bizno)}</div></td>
-        <td><b>${n(c.dtils.length)}개 품목</b> · ${n(c.specs)}개 규격${c.added ? ` <span class="muted small">(새로 ${n(c.added)}개)</span>` : ''}
-          <div class="small">${c.dtils.map((d) => `${esc(d.name)} <span class="muted">${n(d.specs)}</span>`).join(' · ')}</div></td>
-        <td class="nowrap">${inList ? '<span class="muted small">비교 목록에 있음</span>' : `<button class="btn small" data-add="${esc(c.bizno)}">비교에 추가</button>`}</td>
-      </tr>`;
-    })
-    .join('');
-  $('#pfFetchResult').innerHTML = `<div class="notice info pf-fetch">
-    <div><b>"${esc(r.term)}"</b> 조달청 조회 결과 <span class="muted small">· ${when}</span>
-      ${r.corps.length > 1 ? '<span class="muted small">· 이름이 비슷한 업체가 여럿이면 넣은 이름과 같은 업체만 바로 추가합니다</span>' : ''}
-      <button class="btn small" data-close style="float:right">닫기</button></div>
-    <div class="tablewrap" style="margin-top:6px"><table>
-      <thead><tr><th>업체</th><th>쇼핑몰 등록 품목 (품목별 규격 수)</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table></div></div>`;
-  $$('#pfFetchResult [data-add]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const c = r.corps.find((x) => x.bizno === b.dataset.add);
-      if (c && addPerfCorp(c)) loadPerf('auto').then(renderCorpFetch);
-    })
-  );
-  $('#pfFetchResult [data-close]').addEventListener('click', () => ($('#pfFetchResult').innerHTML = ''));
-}
-
 /* ── 연도 선택 (체크한 해만, 떨어진 해도 가능) — 업체 실적·계약 실적이 같이 쓴다 ── */
 
 /**
@@ -4217,7 +4098,6 @@ async function ensurePerfCoverage(mode, lead = '', ctx = perfFillCtx()) {
       '/perf/fillplan?' +
         qs({
           biznos: picked.map((c) => c.bizno).join(','),
-          corps: ctx.scopeAll ? JSON.stringify(picked.map(({ bizno, name }) => ({ bizno, name }))) : '',
           from,
           to,
           years: ctx.years,
@@ -4229,16 +4109,10 @@ async function ensurePerfCoverage(mode, lead = '', ctx = perfFillCtx()) {
   if (perf.filling) return;
   const names = (xs) => xs.slice(0, 6).map(esc).join(' · ') + (xs.length > 6 ? ` 외 ${n(xs.length - 6)}개` : '');
 
-  // 전체 품목 — 업체 단위로 등록품목을 받아 본 적 없는 업체는, 등록했지만 거래내역을 안 받은 세부품명이 더 있을 수 있다
-  const unknown = plan.unknown || [];
-  const skipKey = unknown.map((c) => c.bizno).join(',');
-  if (ctx.scopeAll && unknown.length && perf.skipUnknown !== skipKey) return askCorpListings(unknown, who, names, mode, skipKey);
-
   if (!plan.dtils.length) {
     return banner(
       '',
-      `<span class="small">${who}의 저장된 등록품목이 이 기간에 없어 거래내역을 채울 세부품명이 없습니다.` +
-        ` 업체 실적 탭의 업체 추가 칸에 이름을 넣고 <b>조달청에서 가져오기</b>로 등록품목을 받으면 그 세부품명의 거래내역을 채웁니다.</span>`
+      `<span class="small">${who}의 저장된 등록품목이 이 기간에 없어 거래내역을 채울 세부품명이 없습니다.</span>`
     );
   }
   const jobs = plan.jobs;
@@ -4351,80 +4225,6 @@ async function ensurePerfCoverage(mode, lead = '', ctx = perfFillCtx()) {
   const why = mode !== 'auto' ? '' : !s.autoFill ? '자동 받기가 꺼져 있습니다.' : '예상 호출 수가 오늘 남은 한도보다 많습니다.';
   banner('warn', `${what}<br><span class="small">${why}</span> <button class="btn primary" id="pfFillGo">빠진 날짜만 받기 (약 ${n(est)}회)</button>`);
   $('#pfFillGo').addEventListener('click', doFill);
-}
-
-/**
- * 전체 품목 — 등록품목을 업체 단위로 받아 본 적 없는 업체를 알리고, 조달청에서 업체명으로 받는다 (업체당 API 10~20회).
- * 받은 뒤 ensurePerfCoverage 가 그 업체들이 등록한 세부품명 가운데 거래내역이 빠진 날짜를 보여 주고 묻는다.
- * 검색 전용·모바일은 관리자 PC 에 업체 가져오기를 요청한다 (관리자 PC 가 등록품목과 올해 거래내역을 받는다).
- */
-function askCorpListings(unknown, who, names, mode, skipKey) {
-  const list = names(unknown.map((c) => c.name));
-  const what =
-    `${who} 가운데 <b>${n(unknown.length)}곳</b>은 조달청에서 등록품목을 아직 받지 않아, 등록했지만 거래내역을 받지 않은 세부품명이 더 있을 수 있습니다.` +
-    `<br><span class="small">${list}</span>`;
-  const skip = '<button class="btn" id="pfCorpSkip">건너뛰고 받아 둔 것만 보기</button>';
-  if (state.viewer) {
-    fillBanner('warn', `${what}<br><button class="btn primary" id="pfCorpAsk">관리자에게 등록품목 요청 (${n(unknown.length)}곳)</button> ${skip}`);
-  } else {
-    fillBanner(
-      'warn',
-      `${what}<br><button class="btn primary" id="pfCorpGo">등록품목 받기 (${n(unknown.length)}곳 · 약 ${n(unknown.length * 10)}~${n(unknown.length * 20)}회)</button> ${skip}`
-    );
-  }
-  $('#pfCorpSkip').addEventListener('click', () => {
-    perf.skipUnknown = skipKey;
-    ensurePerfCoverage(mode);
-  });
-
-  $('#pfCorpAsk')?.addEventListener('click', async () => {
-    const b = $('#pfCorpAsk');
-    b.disabled = true;
-    b.textContent = '보내는 중…';
-    const got = { sent: 0, dup: 0, fail: 0 };
-    let why = '';
-    for (const c of unknown) {
-      try {
-        const r = await api('/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataset: 'corp', corp: c.name }) });
-        if (r.state === 'sent' || r.state === 'dup' || r.state === 'queued') got[r.state === 'dup' ? 'dup' : 'sent']++;
-        else (got.fail++, (why = r.error || why));
-      } catch (err) {
-        got.fail++;
-        why = err.message;
-      }
-    }
-    perf.skipUnknown = skipKey; // 받아 올 때까지는 받아 둔 것으로 본다
-    const note = got.fail
-      ? `요청 ${n(got.sent + got.dup)}곳은 보냈지만 ${n(got.fail)}곳은 보내지 못했습니다${why ? ` — ${esc(why)}` : ''}.`
-      : `등록품목 요청을 보냈습니다${got.dup ? ` (이미 요청한 ${n(got.dup)}곳 포함)` : ''}. 관리자 PC 가 받으면 몇 분 뒤 이 화면에도 들어옵니다.`;
-    ensurePerfCoverage(mode, `<span class="small">${note}</span>`);
-  });
-
-  $('#pfCorpGo')?.addEventListener('click', async () => {
-    perf.filling = true;
-    let calls = 0;
-    const fails = [];
-    try {
-      for (const [i, c] of unknown.entries()) {
-        fillBanner('', `조달청에서 등록품목 받는 중 ${i + 1}/${unknown.length} · <b>${esc(c.name)}</b>… (업체마다 30초 안팎)`);
-        try {
-          const r = await api('/corpfetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ term: c.name }) });
-          if (!r.cached) calls += r.calls || 0;
-        } catch (err) {
-          fails.push(`${esc(c.name)}: ${esc(err.message)}`);
-        }
-      }
-    } finally {
-      perf.filling = false;
-    }
-    perf.skipUnknown = skipKey; // 이름으로 못 찾은 업체를 다시 묻지 않게
-    refreshMeta();
-    await loadPerf(null);
-    const note =
-      `등록품목을 받았습니다 (${n(unknown.length - fails.length)}곳 · API ${n(calls)}회)` +
-      (fails.length ? ` · 못 받은 업체 ${n(fails.length)}곳 — ${fails.slice(0, 3).join(' / ')}` : '');
-    ensurePerfCoverage('ask', `<span class="small">${note}</span>`);
-  });
 }
 
 /* ── 관심목록 (세부품명 칩 + 묶음 표, 체크해서 물품비교로) ─────────── */

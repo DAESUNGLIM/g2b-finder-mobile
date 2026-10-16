@@ -628,39 +628,6 @@ export function corpDtils(biznos, from, to) {
     .all(...biznos, from, to);
 }
 
-/**
- * 쇼핑몰 등록품목을 조달청에서 업체 단위로 받아 본 적이 없는 업체 (corp_fetch — 업체 실적 탭의 "조달청에서 가져오기").
- * 받은 결과에 그 사업자번호가 있거나, 그 업체명으로 찾아 본 적이 있으면(못 찾았어도) 받은 것으로 친다.
- * 받지 않은 업체는 저장된 등록품목이 세부품명 단위로 받은 일부뿐이라, 등록한 세부품명을 다 안다고 할 수 없다.
- * @param {{bizno: string, name: string}[] | string} corps  (주소로 받을 때는 JSON)
- */
-export function corpsNotFetched(corps) {
-  if (typeof corps === 'string') {
-    try {
-      corps = JSON.parse(corps);
-    } catch {
-      corps = [];
-    }
-  }
-  corps = (Array.isArray(corps) ? corps : []).slice(0, 50).map((c) => ({ bizno: String(c?.bizno || '').replace(/[^0-9]/g, ''), name: String(c?.name || '') }));
-  if (!corps.length) return [];
-  let saved = [];
-  try {
-    saved = db.prepare('SELECT term, result FROM corp_fetch').all();
-  } catch {
-    return corps; // 표가 아직 없다 (한 번도 받지 않음)
-  }
-  const terms = new Set(saved.map((r) => r.term));
-  if (terms.has('*')) return []; // 쇼핑몰 전체 등록 내역 파일을 가져왔다 (importer.js)
-  const biznos = new Set();
-  for (const r of saved) {
-    try {
-      for (const c of JSON.parse(r.result).corps || []) biznos.add(String(c.bizno));
-    } catch {}
-  }
-  return corps.filter((c) => !biznos.has(c.bizno) && !terms.has(String(c.name || '').replace(/\s+/g, '')));
-}
-
 /** '202601'~'202609' → 그 사이 모든 달 (연도는 '2024'~'2026', 분기는 '2025Q3'~'2026Q2') */
 function fillPeriods(by, first, last) {
   const out = [];

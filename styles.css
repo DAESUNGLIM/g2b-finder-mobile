@@ -531,7 +531,7 @@ button.btn.small { padding: 4px 10px; font-size: 12px; }
   #tab-mine .print-only { display: block; }
   #tab-mine span.print-only { display: inline; }
   #pfPrintHead + h2,
-  #tab-mine .row, #tab-mine #mineNotice, #tab-mine #pfFetchResult, #tab-mine .chips,
+  #tab-mine .row, #tab-mine #mineNotice, #tab-mine .chips,
   #tab-mine .card-head select, #tab-mine details > summary, #tab-mine tr.pf-toggle { display: none !important; }
   #pfPrintHead h1 { font-size: 17px; margin: 0 0 8px; }
   #pfPrintHead table.ph { width: auto; font-size: 11px; margin-bottom: 4px; }
